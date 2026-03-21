@@ -3,6 +3,7 @@ using ParquetViewer.Engine.Types;
 using ParquetViewer.Exceptions;
 using ParquetViewer.Helpers;
 using System;
+using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
@@ -45,7 +46,7 @@ namespace ParquetViewer
         private void recordsToTextBox_TextChanged(object sender, EventArgs? e)
         {
             var textbox = (TextBox)sender;
-            if (int.TryParse(textbox.Text, out var recordCount))
+            if (int.TryParse(textbox.Text, out var recordCount) && recordCount >= 0)
                 this.CurrentMaxRowCount = recordCount;
             else
                 textbox.Text = this.CurrentMaxRowCount.ToString();
@@ -173,8 +174,8 @@ namespace ParquetViewer
 
                 //Treat list, map, and struct types as strings by casting them automatically
                 foreach (var complexField in this.mainGridView.Columns.OfType<DataGridViewColumn>()
-                    .Where(c => c.ValueType == typeof(ListValue) || c.ValueType == typeof(MapValue)
-                        || c.ValueType == typeof(StructValue) || c.ValueType == typeof(ByteArrayValue))
+                    .Where(c => c.ValueType.ImplementsInterface<IListValue>() || c.ValueType.ImplementsInterface<IMapValue>()
+                        || c.ValueType.ImplementsInterface<IStructValue>() || c.ValueType.ImplementsInterface<IByteArrayValue>())
                     .Select(c => c.Name))
                 {
                     //This isn't perfect but it should handle most cases

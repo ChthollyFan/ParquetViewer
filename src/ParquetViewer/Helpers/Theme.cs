@@ -19,6 +19,8 @@ namespace ParquetViewer.Helpers
         public Color SelectionBackColor { get; }
         public Color FormBackgroundColor { get; }
         public Color DisabledTextColor { get; }
+        public Color FrozenColumnHeaderColor { get; }
+        public Color FrozenCellBackgroundColor { get; }
 
         private readonly Func<Theme, ToolStripProfessionalRenderer>? _toolStripRendererProvider = null;
         public bool HasToolStripRendererProvider => _toolStripRendererProvider is not null;
@@ -41,12 +43,13 @@ namespace ParquetViewer.Helpers
             Color formBackgroundColor,
             Func<Theme, ToolStripProfessionalRenderer>? toolStripRendererProvider,
             Color activeHyperlinkColor,
-            Color disabledTextColor)
+            Color disabledTextColor,
+            Color frozenColumnHeaderColor,
+            Color frozenCellBackgroundColor)
         {
             this.CellBackgroundColor = cellBackgroundColor;
             this.TextColor = textColor;
             this.AlternateRowsCellBackgroundColor = alternateRowsCellBackgroundColor;
-            this.ColumnHeaderColor = columnHeaderColor;
             this.ColumnHeaderColor = columnHeaderColor;
             this.RowHeaderColor = rowHeaderColor;
             this.RowHeaderBorderStyle = rowHeaderBorderStyle;
@@ -59,6 +62,8 @@ namespace ParquetViewer.Helpers
             this._toolStripRendererProvider = toolStripRendererProvider;
             this.ActiveHyperlinkColor = activeHyperlinkColor;
             this.DisabledTextColor = disabledTextColor;
+            this.FrozenColumnHeaderColor = frozenColumnHeaderColor;
+            this.FrozenCellBackgroundColor = frozenCellBackgroundColor;
         }
 
         public static Theme DarkModeTheme => new(
@@ -76,7 +81,9 @@ namespace ParquetViewer.Helpers
             Color.FromArgb(44, 44, 44),
             (theme) => { return new DarkModeToolStripRenderer(theme); },
             Color.LightGray,
-            Color.DarkGray
+            Color.DarkGray,
+            Color.FromArgb(33, 37, 63),
+            Color.FromArgb(40, 44, 48)
             );
 
         public static Theme LightModeTheme => new(
@@ -94,7 +101,9 @@ namespace ParquetViewer.Helpers
             SystemColors.Control,
             null,
             Color.Red,
-            Color.DarkGray
+            Color.DarkGray,
+            SystemColors.InactiveCaption,
+            SystemColors.InactiveBorder
             );
 
         public bool Equals(Theme other) => this.GetHashCode() == other.GetHashCode(); //Not perfect but good enough
@@ -168,6 +177,12 @@ namespace ParquetViewer.Helpers
         public override Color MenuItemPressedGradientBegin => this._theme.SelectionBackColor;
         public override Color MenuItemPressedGradientMiddle => this._theme.SelectionBackColor;
         public override Color MenuItemPressedGradientEnd => this._theme.SelectionBackColor;
+        #endregion
+
+        #region Dropdown hover colors
+        public override Color ButtonSelectedGradientBegin => this._theme.SelectionBackColor;
+        public override Color ButtonSelectedGradientMiddle => this._theme.SelectionBackColor;
+        public override Color ButtonSelectedGradientEnd => this._theme.SelectionBackColor;
         #endregion
     }
 }

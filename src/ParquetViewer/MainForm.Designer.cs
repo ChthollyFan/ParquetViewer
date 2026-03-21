@@ -186,9 +186,11 @@ namespace ParquetViewer
             dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
             mainGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
             mainGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            mainGridView.ColumnNameEscapeFormat = "[{0}]";
             mainTableLayoutPanel.SetColumnSpan(mainGridView, 11);
             mainGridView.CopyAsWhereIcon = (System.Drawing.Image)resources.GetObject("mainGridView.CopyAsWhereIcon");
             mainGridView.CopyToClipboardIcon = (System.Drawing.Image)resources.GetObject("mainGridView.CopyToClipboardIcon");
+            mainGridView.DateValueEscapeFormat = "#{0}#";
             mainGridView.EnableHeadersVisualStyles = false;
             mainGridView.Name = "mainGridView";
             mainGridView.ReadOnly = true;

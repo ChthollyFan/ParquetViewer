@@ -20,14 +20,14 @@ jobs:
       skip-publish: ${{ steps.check-tag.outputs.exists }}
     continue-on-error: true
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         sparse-checkout: |
           .github
           src
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4.0.1
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: '8.0.x'
 
@@ -41,7 +41,7 @@ jobs:
       run: dotnet test src/ParquetViewer.sln --no-build --logger trx
 
     - name: Test Report
-      uses: bibipkins/dotnet-test-reporter@v1.4.1
+      uses: bibipkins/dotnet-test-reporter@v1.6.1
       if: github.repository == 'mukunku/ParquetViewer'
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -56,7 +56,7 @@ jobs:
       release_version: ${{ steps.release-version.outputs.release_version }}
       should_publish: ${{ steps.should-publish.outputs.should_publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: |
             src/ParquetViewer/Properties/AssemblyInfo.cs
@@ -72,7 +72,7 @@ jobs:
           Write-Host "Checking version $versionMatch"
 
       - name: Is there a finalized release already
-        uses: mukunku/release-exists-action@v1.0.0
+        uses: mukunku/release-exists-action@v1.1.0
         id: check-release
         with: 
           tag: 'v${{ steps.release-version.outputs.release_version }}'
@@ -90,7 +90,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       VERSION_NUMBER: ${{ needs.checkPublish.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: |
             .github
@@ -110,12 +110,12 @@ jobs:
 
       - name: Build & Publish Regular Release
         run: |
-            dotnet publish src/ParquetViewer/ParquetViewer.csproj -c Release  -f net8.0-windows --nologo -o publish -r win-x64 --no-self-contained
+            dotnet publish src/ParquetViewer/ParquetViewer.csproj -c Release  -f net10.0-windows --nologo -o publish -r win-x64 --no-self-contained
             Get-Item "./publish/ParquetViewer.exe" | Select-Object Name, Length
             
       - name: Build & Publish SelfContained Release
         run: |
-            dotnet publish src/ParquetViewer/ParquetViewer.csproj -c Release_SelfContained  -f net8.0-windows --nologo -o publish_selfcontained -r win-x64 --self-contained
+            dotnet publish src/ParquetViewer/ParquetViewer.csproj -c Release_SelfContained  -f net10.0-windows --nologo -o publish_selfcontained -r win-x64 --self-contained
             Get-Item "./publish_selfcontained/ParquetViewer.exe" | Select-Object Name, Length
 
       - name: Prepare executables for upload
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload unsigned artifact for signing
         id: upload-unsigned-artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: |
             ParquetViewer.exe
@@ -138,7 +138,7 @@ jobs:
 
       # Documentation: https://about.signpath.io/documentation/trusted-build-systems/github
       - name: Submit signing request to SignPath.io
-        uses: signpath/github-action-submit-signing-request@v1.1
+        uses: signpath/github-action-submit-signing-request@v2
         with:
           api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
           organization-id: '5ceccea7-c3e7-4165-8c2e-adab8679db20'

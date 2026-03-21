@@ -26,7 +26,7 @@ jobs:
       - name: Run PowerShell script
         shell: pwsh
         run: |
-            # Find all .resx files for Turkish (tr)
+            # Find all .resx files for Turkish (tr) as that is our source of truth
             $turkishResxFiles = Get-ChildItem -Path . -Recurse -Filter "*.tr.resx"
         
             # Array to hold all combined translation entries
@@ -55,7 +55,7 @@ jobs:
                 Write-Host "Found English file: $englishFilePath"
                 [xml]$englishContent = Get-Content -Path $englishFilePath
                 $englishContent.root.data | ForEach-Object {
-                    if (-not $_.HasAttribute('type')) {
+                    if ((-not $_.HasAttribute('type')) -and (-not $_.HasAttribute('mimetype'))) {
                     $englishData[$_.name] = $_.value
                     $englishComments[$_.name] = $_.comment
                     }

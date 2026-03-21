@@ -1,5 +1,6 @@
 using ParquetViewer.Analytics;
 using ParquetViewer.Controls;
+using ParquetViewer.Engine;
 using ParquetViewer.Engine.Exceptions;
 using ParquetViewer.Helpers;
 using System;
@@ -138,7 +139,7 @@ namespace ParquetViewer
             }
         }
 
-        private Engine.ParquetEngine? _openParquetEngine = null;
+        private IParquetEngine? _openParquetEngine = null;
         #endregion
 
         public MainForm()
@@ -199,13 +200,13 @@ namespace ParquetViewer
             {
                 try
                 {
-                    this._openParquetEngine = await Engine.ParquetEngine.OpenFileOrFolderAsync(this.OpenFileOrFolderPath, default);
+                    this._openParquetEngine = await Engine.ParquetNET.ParquetEngine.OpenFileOrFolderAsync(this.OpenFileOrFolderPath, default);
                 }
                 catch (Exception ex)
                 {
                     if (this._openParquetEngine == null)
                     {
-                        //cancel file open
+                        //cancel the file open
                         this.OpenFileOrFolderPath = null;
                     }
 
@@ -217,9 +218,9 @@ namespace ParquetViewer
                     {
                         HandleSomeFilesSkippedException(sfse);
                     }
-                    else if (ex is FileReadException fre)
+                    else if (ex is Engine.Exceptions.FileReadException fre)
                     {
-                        HandleFileReadException(fre);
+                        MainForm.HandleFileReadException(fre);
                     }
                     else if (ex is MultipleSchemasFoundException msfe)
                     {
@@ -238,10 +239,10 @@ namespace ParquetViewer
                 }
             }
 
-            Parquet.Schema.ParquetSchema? schema = null;
+            List<string>? fields = null;
             try
             {
-                schema = this._openParquetEngine.Schema;
+                fields = this._openParquetEngine.Fields;
             }
             catch (ArgumentException ex) when (ex.Message.StartsWith("at least one field is required"))
             { /*swallow: This exception is thrown from Parquet.Net when the schema has no fields*/ }
@@ -250,12 +251,11 @@ namespace ParquetViewer
                 throw new Parquet.ParquetException(Resources.Errors.ParquetSchemaReadErrorMessage, ex);
             }
 
-            var fields = schema?.Fields;
             if (fields?.Count > 0)
             {
                 if (AppSettings.AlwaysSelectAllFields && !forceOpenDialog)
                 {
-                    return fields.Where(FieldsToLoadForm.IsSupportedFieldType).Select(f => f.Name).ToList();
+                    return fields;
                 }
                 else
                 {
@@ -279,6 +279,46 @@ namespace ParquetViewer
 
         private async void LoadFileToGridview()
         {
+            if (this._openParquetEngine is null)
+                return;
+
+#if RELEASE_SELFCONTAINED
+            //Self contained release has both Parquet.NET and DuckDB engines included as the file size remains the same.
+            try
+            {
+                await this.LoadFileToGridviewImpl(this._openParquetEngine);
+            }
+            catch (Exception unhandledEx)
+            {
+                //Try DuckDB if Parquet.NET fails
+                if (this._openParquetEngine is Engine.DuckDB.ParquetEngine)
+                    throw;
+
+                try
+                {
+                    var duckDbEngine = await Engine.DuckDB.ParquetEngine.OpenFileOrFolderAsync(this.OpenFileOrFolderPath!, default);
+                    await LoadFileToGridviewImpl(duckDbEngine);
+                    SwapEngines(duckDbEngine);
+                }
+                catch (Exception duckDbEx)
+                {
+                    //If DuckDB fails too, bail
+                    throw new Exceptions.RowsReadException(unhandledEx, duckDbEx);
+                }
+            }
+
+            void SwapEngines(IParquetEngine newEngine)
+            {
+                this._openParquetEngine.DisposeSafely();
+                this._openParquetEngine = newEngine;
+            }
+#else
+            await this.LoadFileToGridviewImpl(this._openParquetEngine);
+#endif
+        }
+
+        private async Task LoadFileToGridviewImpl(IParquetEngine engine)
+        {
             var stopwatch = Stopwatch.StartNew(); var loadTime = TimeSpan.Zero; var indexTime = TimeSpan.Zero;
             LoadingIcon? loadingIcon = null;
             var wasSuccessful = false;
@@ -296,12 +336,12 @@ namespace ParquetViewer
                     return;
                 }
 
-                long cellCount = this.SelectedFields.Count * Math.Min(this.CurrentMaxRowCount, this._openParquetEngine!.RecordCount - this.CurrentOffset);
+                long cellCount = this.SelectedFields.Count * Math.Min(this.CurrentMaxRowCount, engine.RecordCount - this.CurrentOffset);
                 loadingIcon = this.ShowLoadingIcon(Resources.Strings.LoadingDataLabelText, cellCount);
 
                 var intermediateResult = await Task.Run(async () =>
                 {
-                    return await this._openParquetEngine.ReadRowsAsync(this.SelectedFields, this.CurrentOffset, this.CurrentMaxRowCount, loadingIcon.CancellationToken, loadingIcon);
+                    return await engine.ReadRowsAsync(this.SelectedFields, this.CurrentOffset, this.CurrentMaxRowCount, loadingIcon.CancellationToken, loadingIcon);
                 }, loadingIcon.CancellationToken);
 
                 loadTime = stopwatch.Elapsed;
@@ -318,7 +358,7 @@ namespace ParquetViewer
                 indexTime = stopwatch.Elapsed - loadTime;
 
                 this.recordCountStatusBarLabel.Text = string.Format(Resources.Strings.LoadedRecordCountRangeFormat, this.CurrentOffset, this.CurrentOffset + finalResult.Rows.Count);
-                this.totalRowCountStatusBarLabel.Text = finalResult.ExtendedProperties[Engine.ParquetEngine.TotalRecordCountExtendedPropertyKey]!.ToString();
+                this.totalRowCountStatusBarLabel.Text = engine.RecordCount.ToString();
                 this.actualShownRecordCountLabel.Text = finalResult.Rows.Count.ToString();
 
                 this.MainDataSource = finalResult;
@@ -364,18 +404,23 @@ namespace ParquetViewer
                 this.showingStatusBarLabel.ToolTipText = $"Total time: {totalTime:mm\\:ss\\.ff}" + Environment.NewLine +
                 $"    Load time: {loadTime:mm\\:ss\\.ff}" + Environment.NewLine +
                 $"    Index time: {indexTime:mm\\:ss\\.ff}" + Environment.NewLine +
-                $"    Render time: {renderTime:mm\\:ss\\.ff}" + Environment.NewLine;
+                $"    Render time: {renderTime:mm\\:ss\\.ff}" + Environment.NewLine +
+                $"Engine: {(engine is Engine.ParquetNET.ParquetEngine ? "ParquetNET" : "DuckDB")}";
 
                 loadingIcon?.Dispose();
 
                 if (wasSuccessful)
                 {
+                    var engineType = this._openParquetEngine is Engine.ParquetNET.ParquetEngine
+                        ? FileOpenEvent.ParquetEngineTypeId.ParquetNET
+                        : FileOpenEvent.ParquetEngineTypeId.DuckDB;
+
                     FileOpenEvent.FireAndForget(
                         Directory.Exists(this.OpenFileOrFolderPath),
-                        this._openParquetEngine!.NumberOfPartitions,
-                        this._openParquetEngine.RecordCount,
-                        this._openParquetEngine.ThriftMetadata.RowGroups.Count,
-                        this._openParquetEngine.Fields.Count,
+                        engine.NumberOfPartitions,
+                        engine.RecordCount,
+                        engine.Metadata.RowGroups.Count,
+                        engine.Fields.Count,
                         this.MainDataSource!.Columns.Cast<DataColumn>().Select(column => column.DataType.Name).Distinct().Order().ToArray(),
                         this.CurrentOffset,
                         this.CurrentMaxRowCount,
@@ -383,7 +428,8 @@ namespace ParquetViewer
                         (long)totalTime.TotalMilliseconds,
                         (long)loadTime.TotalMilliseconds,
                         (long)indexTime.TotalMilliseconds,
-                        (long)renderTime.TotalMilliseconds);
+                        (long)renderTime.TotalMilliseconds,
+                        engineType);
                 }
             }
         }
