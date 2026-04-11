@@ -125,7 +125,7 @@ namespace ParquetViewer.Engine
                 }
                 jsonWriter.WriteEndArray();
             }
-            else if (value is IByteArrayValue byteArray /*&& truncateForDisplay //should use the entire byte array if 
+            else if (value is IByteArrayValue byteArray /*&& truncateForDisplay //should we use the entire byte array if 
                                                         * we're not truncating for display? Seems kind of unreasonable 
                                                         * for users to rely on binary data within a Struct value preview.*/)
             {
@@ -148,6 +148,14 @@ namespace ParquetViewer.Engine
                     jsonWriter.WriteStringValue(dateOnly.ToString(ParquetEngineSettings.DateOnlyDisplayFormat));
                 else
                     jsonWriter.WriteStringValue(dateOnly.ToString());
+            }
+            else if (value is TimeOnly timeOnly)
+            {
+                //Write time as string
+                if (ParquetEngineSettings.TimeOnlyDisplayFormat is not null)
+                    jsonWriter.WriteStringValue(timeOnly.ToString(ParquetEngineSettings.TimeOnlyDisplayFormat));
+                else
+                    jsonWriter.WriteStringValue(timeOnly.ToString());
             }
             else
             {

@@ -44,6 +44,7 @@ namespace ParquetViewer.Tests
             //Set a consistent date format for all tests
             ParquetEngineSettings.DateDisplayFormat = "yyyy-MM-dd HH:mm:ss";
             ParquetEngineSettings.DateOnlyDisplayFormat = "yyyy-MM-dd";
+            ParquetEngineSettings.TimeOnlyDisplayFormat = "HH:mm:ss";
 
             this._useDuckDBEngine = useDuckDBEngine;
             this._canHandleNullComplexTypes = canHandleNullComplexTypes;
@@ -713,6 +714,19 @@ namespace ParquetViewer.Tests
             Assert.AreEqual("id", lastColumn.Statistics.MaxValue);
             Assert.IsNull(lastColumn.Statistics.IsMinValueExact);
             Assert.IsNull(lastColumn.Statistics.IsMinValueExact);
+        }
+
+        [SkippableTestMethod]
+        public async Task DATETTIME_ONLY_TYPE_PYARROW_V22()
+        {
+            using var parquetEngine = await OpenFileOrFolderAsync("Data/TIME_ONLY_TYPE_PYARROW_V22.parquet", default);
+
+            Assert.AreEqual(4626, parquetEngine.RecordCount);
+            Assert.HasCount(2, parquetEngine.Fields);
+
+            var dataTable = (await parquetEngine.ReadRowsAsync(parquetEngine.Fields, 0, int.MaxValue, default))(false);
+            Assert.AreEqual(new DateOnly(2024, 1, 1), dataTable.Rows[0][0]);
+            Assert.AreEqual(new TimeOnly(215720000000), dataTable.Rows[0][1]);
         }
     }
 }
