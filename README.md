@@ -13,6 +13,7 @@ Some key features:
 * Run simple sql queries on parquet data
 * Open single or partitioned files
 * Generate SQL schema from parquet files
+* Easily preview & export image and audio data
 
 # Download
 Releases can be found here: https://github.com/mukunku/ParquetViewer/releases
