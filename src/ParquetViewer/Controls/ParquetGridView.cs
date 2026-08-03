@@ -75,6 +75,7 @@ namespace ParquetViewer.Controls
             SelectionMode = DataGridViewSelectionMode.RowHeaderSelect;
             ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
             ShowCellToolTips = false; //tooltips for columns with very long strings cause performance issues. This was the easiest solution
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None; //Leave as the default None as I'm concerned about performance to change the default. Needz moar testing to see if we can set to `DisplayedCells` by default
         }
 
         protected override void OnDataSourceChanged(EventArgs e)
@@ -625,6 +626,7 @@ namespace ParquetViewer.Controls
 
                     AddFrozenOption(this._headerContextMenu.Items, e.ColumnIndex);
                     AddDisplayFormatOptions(this._headerContextMenu.Items, e.ColumnIndex);
+                    AddWordWrapOption(this._headerContextMenu.Items, e.ColumnIndex);
 
                     if (this._headerContextMenu.Items.Count > 0)
                         this._headerContextMenu.Show(Cursor.Position);
@@ -806,8 +808,8 @@ namespace ParquetViewer.Controls
                         .Where(value => value is not null)!;
                 }
 
-                // Get the longest string in the array. (Limit to 100k values to improve render time)
-                string? longestColString = colStringCollection.Take(forceAutoSizeColumnIndex is not null ? int.MaxValue : 100_000).MaxBy(stringValue => stringValue.Length);
+                // Get the longest string in the array. (Limit to 10k values to improve render time)
+                string? longestColString = colStringCollection.Take(forceAutoSizeColumnIndex is not null ? int.MaxValue : 10_000).MaxBy(stringValue => stringValue.Length);
                 if (longestColString is not null)
                     newColumnSize = Math.Max(newColumnSize, MeasureStringWidth(gfx, this.Font, longestColString, true));
 
@@ -1148,7 +1150,7 @@ namespace ParquetViewer.Controls
                 { Checked = displayFormat == FloatDisplayFormat.Scientific };
                 scientificNotationMenuItem.Click += (object? _, EventArgs _) =>
                 {
-                    ColumnFormattedEvent.FireAndForget(scientificNotationMenuItem.Text);
+                    ColumnFormattedEvent.FireAndForget("Scientific");
 
                     if (floatColumnsWithFormatOverrides.ContainsKey(columnName))
                         floatColumnsWithFormatOverrides[columnName] = FloatDisplayFormat.Scientific;
@@ -1164,7 +1166,7 @@ namespace ParquetViewer.Controls
                 { Checked = displayFormat == FloatDisplayFormat.Decimal };
                 decimalNotationMenuItem.Click += (object? _, EventArgs _) =>
                 {
-                    ColumnFormattedEvent.FireAndForget(decimalNotationMenuItem.Text);
+                    ColumnFormattedEvent.FireAndForget("Decimal");
 
                     if (floatColumnsWithFormatOverrides.ContainsKey(columnName))
                         floatColumnsWithFormatOverrides[columnName] = FloatDisplayFormat.Decimal;
@@ -1199,6 +1201,63 @@ namespace ParquetViewer.Controls
             {
                 column.Frozen = !column.Frozen;
                 this.StyleFrozenColumns();
+            };
+
+            items.Add(menuItem);
+        }
+
+        private void AddWordWrapOption(ToolStripItemCollection items, int columnIndex)
+        {
+            var column = this.Columns[columnIndex];
+            var isWordWrapEnabled = column.DefaultCellStyle.WrapMode == DataGridViewTriState.True;
+
+            //If word wrap is already enabled, we want to show this option
+            if (!isWordWrapEnabled)
+            {
+                //If not, only show this option if the text in the currently displayed cells are cut off
+                var hasCutOffText = false;
+                foreach (var rowIndex in GetVisibleRowIndexes())
+                {
+                    if (IsCellTextCutOff(rowIndex, columnIndex))
+                    {
+                        hasCutOffText = true;
+                        break;
+                    }
+                }
+                if (!hasCutOffText)
+                    return;
+            }
+
+            var menuItem = new ToolStripMenuItem(Resources.Strings.WordWrapContextMenuItemText)
+            { Checked = isWordWrapEnabled };
+
+            menuItem.Click += (object? _, EventArgs _) =>
+            {
+                var isWordWrapCurrentlyEnabled = column.DefaultCellStyle.WrapMode == DataGridViewTriState.True;
+
+                if (!isWordWrapCurrentlyEnabled)
+                    ColumnFormattedEvent.FireAndForget("WordWrap");
+
+                column.DefaultCellStyle.WrapMode = isWordWrapCurrentlyEnabled ? DataGridViewTriState.False : DataGridViewTriState.True;
+
+                var didWeJustEnableWordWrap = !isWordWrapCurrentlyEnabled;
+                if (didWeJustEnableWordWrap)
+                {
+                    AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells;
+                }
+                else
+                {
+                    var doesAnyColumnHaveWordWrapEnabled = this.Columns.Cast<DataGridViewColumn>()
+                        .Any(col => col.DefaultCellStyle.WrapMode == DataGridViewTriState.True);
+                    if (doesAnyColumnHaveWordWrapEnabled)
+                    {
+                        AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells;
+                    }
+                    else
+                    {
+                        AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+                    }
+                }
             };
 
             items.Add(menuItem);
@@ -1414,6 +1473,45 @@ namespace ParquetViewer.Controls
         {
             Scientific = 0,
             Decimal
+        }
+
+        /// <summary>
+        /// Simple tool to guess if text is long enough to be cut off in a cell.
+        /// Returns false for all non-string columns.
+        /// </summary>
+        private bool IsCellTextCutOff(int rowIndex, int columnIndex)
+        {
+            var cell = this.Rows[rowIndex].Cells[columnIndex];
+            if (cell.OwningColumn?.ValueType != typeof(string))
+                return false; //Only show word wrap for string columns
+
+            var text = cell.FormattedValue?.ToString() ?? string.Empty;
+            if (string.IsNullOrEmpty(text))
+                return false;
+
+            Size textSize = TextRenderer.MeasureText(text, cell.InheritedStyle.Font ?? this.Font);
+            return textSize.Width > this.Columns[columnIndex].Width;
+        }
+
+        /// <summary>
+        /// Returns the row indexes for rows that are currently visible
+        /// </summary>
+        private IEnumerable<int> GetVisibleRowIndexes()
+        {
+            int firstIndex = this.FirstDisplayedScrollingRowIndex;
+            if (firstIndex < 0)
+                yield break; // no rows displayed (e.g., grid is empty)
+
+            int displayedCount = this.DisplayedRowCount(true); // true = include partially visible rows
+
+            for (int i = 0; i < displayedCount; i++)
+            {
+                int rowIndex = firstIndex + i;
+                if (rowIndex >= this.Rows.Count)
+                    yield break;
+
+                yield return rowIndex;
+            }
         }
     }
 }

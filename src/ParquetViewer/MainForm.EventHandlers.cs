@@ -1,4 +1,5 @@
 ﻿using ParquetViewer.Analytics;
+using ParquetViewer.Engine;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Exceptions;
 using ParquetViewer.Helpers;
@@ -7,8 +8,10 @@ using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace ParquetViewer
@@ -17,6 +20,8 @@ namespace ParquetViewer
     {
         [GeneratedRegex("^WHERE ")]
         private static partial Regex QueryUselessPartRegex();
+
+        private int _failedFileIntegrityCheckCount = 0;
 
         private void offsetTextBox_KeyPress(object sender, KeyPressEventArgs e)
         {
@@ -160,6 +165,10 @@ namespace ParquetViewer
             {
                 this.loadAllRowsButton_Click(null, null);
             }
+            else if (e.Control && e.KeyCode == Keys.R && this._openParquetEngine is not null) //Reload shortcut
+            {
+                LoadFileToGridview();
+            }
         }
 
         private void runQueryButton_Click(object sender, EventArgs? e)
@@ -287,6 +296,133 @@ namespace ParquetViewer
 
             AppSettings.UserSelectedCulture = newCultureInfo;
             UtilityMethods.RestartApplication();
+        }
+
+        /// <remarks>Originally I implemented a FileSystemWatcher but it seems network drives are not reliable with that.
+        /// Not sure how common that is but this implementation without it is simpler and I'm hoping not too IO intensive</remarks>
+        private async void fileIntegrityCheckingTimer_Tick(object sender, EventArgs e)
+        {
+            if (this.OpenFileOrFolderPath is null || this._openParquetEngine is null)
+                return; //no file open
+
+            this.fileIntegrityCheckingTimer.Stop();
+            try
+            {
+                var fileDeletedSuffix = $" ({Resources.Strings.OpenFileNoLongerExistsTitleSuffix})";
+                var fileModifiedSuffix = $" ({Resources.Strings.OpenFileWasModifiedTitleSuffix})";
+
+                if (this._originalModifiedInfo is null)
+                {
+                    ResetTitle();
+                }
+
+                var alreadyHasDeletedSuffix = this.Text.EndsWith(fileDeletedSuffix);
+
+                //Perform file system checks in a background thread avoid blocking the UI thread.
+                //Only really relevant when opening a folder with many files on a network drive.
+                var engineSnapshot = this._openParquetEngine;
+                var lastModifiedInfo = await Task.Run(() => TryGetLastModifiedInfo(engineSnapshot, this.OpenFileOrFolderPath));
+                if (!ReferenceEquals(engineSnapshot, this._openParquetEngine))
+                    return; //the user has opened a different file/folder while we were checking the file system, so ignore this result
+
+                if (lastModifiedInfo is null && !alreadyHasDeletedSuffix)
+                {
+                    ResetTitle();
+                    //File or folder no longer exists. In this case let's not mark this timer as handled
+                    //and let it keep running in case the file/folder is restored later.
+                    this.Text += fileDeletedSuffix;
+                    return;
+                }
+                else if (lastModifiedInfo is not null && alreadyHasDeletedSuffix)
+                {
+                    ResetTitle();
+                }
+
+                if (lastModifiedInfo is not null)
+                {
+                    if (_originalModifiedInfo is null)
+                    {
+                        _originalModifiedInfo = lastModifiedInfo;
+                    }
+                    else if (_originalModifiedInfo != lastModifiedInfo && !this.Text.EndsWith(fileModifiedSuffix))
+                    {
+                        ResetTitle();
+                        this.Text += fileModifiedSuffix;
+                    }
+                }
+
+                this._failedFileIntegrityCheckCount = 0;
+
+                void ResetTitle()
+                {
+                    if (this.Text.EndsWith(fileModifiedSuffix))
+                        this.Text = this.Text.Replace(fileModifiedSuffix, string.Empty);
+                    else if (this.Text.EndsWith(fileDeletedSuffix))
+                        this.Text = this.Text.Replace(fileDeletedSuffix, string.Empty);
+                }
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                //swallow expected exceptions to not overload the user with error message dialogs
+            }
+            catch (Exception ex)
+            {
+                //Swallow to not overload the user with error message dialogs but log it as this is unexpected.
+                //Also make sure we don't spam exception events for repeated failures.
+                if (++this._failedFileIntegrityCheckCount == 1)
+                {
+                    ExceptionEvent.FireAndForget(ex);
+                }
+            }
+            finally
+            {
+                this.fileIntegrityCheckingTimer.Start();
+            }
+
+            //Returns the last modified date and size of the open file, or the most recent last modified
+            //date and total combined size of all open files in the folder.
+            static (DateTime LastModifiedUtc, long Length)? TryGetLastModifiedInfo(IParquetEngine engine, string openFileOrFolderPath)
+            {
+                if (engine is null)
+                {
+                    return null; //no open file;
+                }
+
+                DateTime latest = Directory.Exists(openFileOrFolderPath) ? Directory.GetCreationTimeUtc(openFileOrFolderPath) : DateTime.MinValue;
+                long totalLength = 0;
+                bool foundAny = false;
+                var counter = 0;
+
+                foreach (var filePath in engine.GetOpenParquetFilePaths())
+                {
+                    if (counter >= 250)
+                    {
+                        //We don't want to check too many files in case the user has a folder with a lot of files open.
+                        //This is a safeguard against performance issues.
+                        break;
+                    }
+
+                    var info = new FileInfo(filePath);
+                    if (!info.Exists)
+                    {
+                        return null; //file was deleted
+                    }
+
+                    //There's a chance the file could be deleted between the time we check for existence above and when we access .Length and .LastWriteTimeUtc below.
+                    //This is fine as the caller has a try-catch block that catches IOException types.
+                    totalLength += info.Length;
+
+                    if (!foundAny || info.LastWriteTimeUtc > latest)
+                    {
+                        latest = info.LastWriteTimeUtc;
+                        foundAny = true;
+                    }
+
+                    counter++;
+                }
+
+                return (latest, totalLength);
+            }
         }
     }
 }

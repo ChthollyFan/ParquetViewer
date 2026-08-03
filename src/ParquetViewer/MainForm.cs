@@ -22,7 +22,6 @@ namespace ParquetViewer
 
         #region Members
         private readonly string? fileToLoadOnLaunch = null;
-
         private string? _openFileOrFolderPath;
         private string? OpenFileOrFolderPath
         {
@@ -57,9 +56,11 @@ namespace ParquetViewer
                 }
                 else
                 {
-                    this.Text = string.Format(
-                        File.Exists(this._openFileOrFolderPath) ? Resources.Strings.MainWindowOpenFileTitleFormat : Resources.Strings.MainWindowOpenFolderTitleFormat,
-                        this._openFileOrFolderPath);
+                    if (File.Exists(this._openFileOrFolderPath))
+                        this.Text = string.Format(Resources.Strings.MainWindowOpenFileTitleFormat, this._openFileOrFolderPath);
+                    else
+                        this.Text = string.Format(Resources.Strings.MainWindowOpenFolderTitleFormat, this._openFileOrFolderPath);
+
                     this.changeFieldsMenuStripButton.Enabled = true;
                     this.saveAsToolStripMenuItem.Enabled = true;
                     this.getSQLCreateTableScriptToolStripMenuItem.Enabled = true;
@@ -140,6 +141,8 @@ namespace ParquetViewer
         }
 
         private IParquetEngine? _openParquetEngine = null;
+
+        private (DateTime LastWriteTimeUtc, long Length)? _originalModifiedInfo;
         #endregion
 
         public MainForm()
@@ -315,6 +318,8 @@ namespace ParquetViewer
 #else
             await this.LoadFileToGridviewImpl(this._openParquetEngine);
 #endif
+
+            this._originalModifiedInfo = null;
         }
 
         private async Task LoadFileToGridviewImpl(IParquetEngine engine)
