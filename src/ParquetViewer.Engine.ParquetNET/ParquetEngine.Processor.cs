@@ -515,7 +515,9 @@ namespace ParquetViewer.Engine.ParquetNET
                 {
                     dataTable.AddColumn(field, typeof(StructValueExt), parent);
                 }
-                else if (schema.SchemaElement.Type == Parquet.Meta.Type.BYTE_ARRAY
+                //BYTE_ARRAY 与 FIXED_LEN_BYTE_ARRAY(即 fixed_size_binary[x]) 在无逻辑类型注解时都按原始字节数组展示
+                else if ((schema.SchemaElement.Type == Parquet.Meta.Type.BYTE_ARRAY
+                    || schema.SchemaElement.Type == Parquet.Meta.Type.FIXED_LEN_BYTE_ARRAY)
                     && schema.SchemaElement.LogicalType is null
                     && schema.SchemaElement.ConvertedType is null)
                 {
