@@ -545,7 +545,12 @@ namespace ParquetViewer.Controls
 
                 //Figure out which format to show the binary data in
                 if (!this.byteArrayColumnsWithFormatOverrides.TryGetValue(this.Columns[e.ColumnIndex].Name, out var userSelectedDisplayFormat))
-                    userSelectedDisplayFormat = default;
+                {
+                    //无用户指定格式时，字节可打印为 ASCII 则默认按文本显示，否则回退为 Hex
+                    userSelectedDisplayFormat = byteArrayValue.ToASCII(out var _)
+                        ? IByteArrayValue.DisplayFormat.ASCII
+                        : IByteArrayValue.DisplayFormat.Hex;
+                }
 
                 e.Value = FormatByteArrayString(byteArrayValue, userSelectedDisplayFormat, charLimit);
                 e.FormattingApplied = true;
@@ -796,11 +801,17 @@ namespace ParquetViewer.Controls
                     this.Columns[i].Width = Math.Min(Math.Max(240, newColumnSize), maxWidth);
                     return;
                 }
-                else if (gridTable.Columns[i].DataType.ImplementsInterface<IByteArrayValue>()
-                    && this.byteArrayColumnsWithFormatOverrides.TryGetValue(gridTable.Columns[i].ColumnName, out var byteArrayDisplayFormat))
+                else if (gridTable.Columns[i].DataType.ImplementsInterface<IByteArrayValue>())
                 {
+                    var hasByteArrayFormatOverride = this.byteArrayColumnsWithFormatOverrides.TryGetValue(gridTable.Columns[i].ColumnName, out var byteArrayDisplayFormat);
                     colStringCollection = nonNullColumnValues
-                        .Select(row => FormatByteArrayString(row.Field<IByteArrayValue>(i)!, byteArrayDisplayFormat, 1000 /*1000 chars seems like a good max limit*/));
+                        .Select(row =>
+                        {
+                            //无用户指定格式时，按与单元格一致的默认逻辑估算列宽（可打印 ASCII 用文本长度，否则 Hex）
+                            var format = hasByteArrayFormatOverride ? byteArrayDisplayFormat
+                                : (row.Field<IByteArrayValue>(i)!.ToASCII(out var _) ? IByteArrayValue.DisplayFormat.ASCII : IByteArrayValue.DisplayFormat.Hex);
+                            return FormatByteArrayString(row.Field<IByteArrayValue>(i)!, format, 1000 /*1000 chars seems like a good max limit*/);
+                        });
                 }
                 else
                 {
@@ -1141,7 +1152,12 @@ namespace ParquetViewer.Controls
                     contextMenu.Add(toolstripMenuItem);
 
                     if (!byteArrayColumnsWithFormatOverrides.TryGetValue(columnName, out var displayFormat))
-                        displayFormat = default;
+                    {
+                        //无用户指定格式时，若抽查值均可打印 ASCII 则默认勾选 ASCII，与单元格默认显示保持一致
+                        displayFormat = possibleDisplayFormats.Contains(IByteArrayValue.DisplayFormat.ASCII)
+                            ? IByteArrayValue.DisplayFormat.ASCII
+                            : default;
+                    }
 
                     toolstripMenuItem.Checked = displayFormat == supportedFormat;
                 }
