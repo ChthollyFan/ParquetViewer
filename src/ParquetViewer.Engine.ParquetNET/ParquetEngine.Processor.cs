@@ -1,4 +1,5 @@
-﻿using Parquet;
+using Parquet;
+using Parquet.Data;
 using Parquet.Schema;
 using ParquetViewer.Engine.Exceptions;
 using ParquetViewer.Engine.ParquetNET.Types;
@@ -197,9 +198,9 @@ namespace ParquetViewer.Engine.ParquetNET
                     numberOfListParents = numberOfListParents == 0 ? 1 : numberOfListParents;
                     #endregion
 
-                    var listValueBuilder = new ListValueBuilder(dataColumn.RepetitionLevels!, dataColumn.DefinitionLevels!, dataEnumerable, dataColumn.Field.ClrType);
+                    var listValueBuilder = new ListValueBuilder(dataColumn.RepetitionLevels!, dataColumn.DefinitionLevels!, dataEnumerable, itemField.ClrType);
                     var listValues = listValueBuilder.ReadRows((int)skipRecords, (int)readRecords, numberOfListParents,
-                        itemField.CurrentDefinitionLevel, dataColumn.Field.MaxDefinitionLevel, cancellationToken);
+                        itemField.CurrentDefinitionLevel, itemField.DataField?.MaxDefinitionLevel ?? 0, cancellationToken);
                     lastMilestone = "ReadRows";
 
                     foreach (var listValue in listValues)
@@ -399,11 +400,11 @@ namespace ParquetViewer.Engine.ParquetNET
                     mapValues.Add(value);
 
                     if (keyDataColumn.IsEmpty(index, keyField) || valueDataColumn.IsEmpty(index, valueField))
-                        dataTable.Rows[rowIndex]![fieldIndex] = new MapValue([], keyField.DataField!.ClrType, [], valueField.DataField!.ClrType);
+                        dataTable.Rows[rowIndex]![fieldIndex] = new MapValue([], keyField.ClrType, [], valueField.ClrType);
                     else if (keyDataColumn.IsNull(index, keyField) || valueDataColumn.IsNull(index, valueField))
                         dataTable.Rows[rowIndex]![fieldIndex] = DBNull.Value;
                     else
-                        dataTable.Rows[rowIndex]![fieldIndex] = new MapValue(mapKeys, keyField.DataField!.ClrType, mapValues, valueField.DataField!.ClrType);
+                        dataTable.Rows[rowIndex]![fieldIndex] = new MapValue(mapKeys, keyField.ClrType, mapValues, valueField.ClrType);
 
                     mapKeys = null;
                     mapValues = null;
@@ -543,11 +544,14 @@ namespace ParquetViewer.Engine.ParquetNET
             return dataTable;
         }
 
-        private static async Task<Parquet.Data.DataColumn> ReadColumnAsync(ParquetRowGroupReader groupReader, ParquetSchemaElement field, CancellationToken cancellationToken)
+        private static async Task<RawColumnDataView> ReadColumnAsync(ParquetRowGroupReader groupReader, ParquetSchemaElement field, CancellationToken cancellationToken)
         {
             try
             {
-                return await groupReader.ReadColumnAsync(field.DataField ?? throw new MalformedFieldException($"Field `{field.PathWithParent}` has no data field"), cancellationToken);
+                // Parquet.Net 6.x 用 ReadRawColumnDataBaseAsync 取代 ReadColumnAsync，返回泛型 RawColumnData<T>
+                var dataField = field.DataField ?? throw new MalformedFieldException($"Field `{field.PathWithParent}` has no data field");
+                var rawColumnData = await groupReader.ReadRawColumnDataBaseAsync(dataField, cancellationToken);
+                return await ConvertRawColumnDataView(groupReader, dataField, rawColumnData, field, cancellationToken);
             }
             catch (OverflowException ex)
             {
@@ -572,5 +576,144 @@ namespace ParquetViewer.Engine.ParquetNET
                 throw new ParquetEngineException(maskedExMessage, ex);
             }
         }
+
+        /// <summary>
+        /// 将 Parquet.Net 6.x 的泛型 RawColumnData<T> 转为引擎内部使用的 RawColumnDataView，
+        /// 便于后续按行展开（GetDataWithPaddedNulls 等）时保持既有逻辑。
+        /// </summary>
+        /// <param name="groupReader">当前行组读取器，含 null 列需要二次读取物理值流</param>
+        /// <param name="dataField">列对应的 DataField</param>
+        /// <param name="rawColumnData">库返回的原始列数据</param>
+        /// <param name="field">字段定义</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>统一视图，Data 为每行值的 object 数组</returns>
+        private static async Task<RawColumnDataView> ConvertRawColumnDataView(ParquetRowGroupReader groupReader, DataField dataField, RawColumnData rawColumnData, ParquetSchemaElement field, CancellationToken cancellationToken)
+        {
+            // 若 CLR 类型为 Nullable<T>，库返回的 RawColumnData<T> 以非空 T 为泛型参数
+            var actualType = Nullable.GetUnderlyingType(dataField.ClrType) ?? dataField.ClrType;
+            // 6.x 的 TIME 列以 Int64 表达原始时间值，TimeDataField.Precision 用于还原 TimeOnly
+            var timePrecision = (field.DataField as Parquet.Schema.TimeDataField)?.Precision;
+            var method = typeof(ParquetEngine).GetMethod(nameof(ConvertRawColumnDataViewGeneric),
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .MakeGenericMethod(actualType);
+            try
+            {
+                return await (Task<RawColumnDataView>)method.Invoke(null, new object[] { groupReader, dataField, rawColumnData, timePrecision, cancellationToken })!;
+            }
+            catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+            {
+                // 反射调用会把泛型方法内部异常包装为 TargetInvocationException，解包后按原异常类型上抛
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        private static async Task<RawColumnDataView> ConvertRawColumnDataViewGeneric<T>(ParquetRowGroupReader groupReader, DataField dataField, RawColumnData rawColumnData, Parquet.Schema.TimeUnitPrecision? timePrecision, CancellationToken cancellationToken) where T : struct
+        {
+            var typed = (RawColumnData<T>)rawColumnData;
+
+            // 列不含 repetition/definition levels 时库会在访问时抛异常，捕获后置 null（与旧 DataColumn 行为一致）
+            int[]? repetitionLevels = null;
+            try
+            {
+                if (!typed.RepetitionLevels.IsEmpty)
+                    repetitionLevels = typed.RepetitionLevels.ToArray();
+            }
+            catch (InvalidOperationException)
+            {
+                repetitionLevels = null;
+            }
+
+            int[]? definitionLevels = null;
+            try
+            {
+                if (!typed.DefinitionLevels.IsEmpty)
+                    definitionLevels = typed.DefinitionLevels.ToArray();
+            }
+            catch (InvalidOperationException)
+            {
+                definitionLevels = null;
+            }
+
+            object?[] data;
+            if (definitionLevels is null || !definitionLevels.Any(d => d < dataField.MaxDefinitionLevel))
+            {
+                // 无 def levels（required 列）或列不含 null 时，Values 每位置一个值且无 null，可直接使用
+                var values = typed.Values;
+                data = new object?[values.Length];
+                for (var i = 0; i < values.Length; i++)
+                {
+                    data[i] = NormalizeColumnValue(values[i], timePrecision);
+                }
+            }
+            else
+            {
+                // 6.1.0 的 Values 对含 null 项/空项的列表列会错位（null 位置被后续物理值占用），
+                // 改用 ReadRawAsync 重读物理值流（只含有值位置的值），并按 def==maxDef 展开重建，恢复 5.x 语义
+                var maxDefinitionLevel = dataField.MaxDefinitionLevel;
+                var positionCount = definitionLevels.Length;
+                // 库可能额外写行标记，放大 defs/reps buffer 避免越界
+                var bufferSize = positionCount + (int)Math.Min(groupReader.RowCount, int.MaxValue);
+                var valuesBuffer = new T[positionCount];
+                var defsBuffer = new int[bufferSize];
+                var repsBuffer = new int[bufferSize];
+                await groupReader.ReadRawAsync(dataField, valuesBuffer.AsMemory(), defsBuffer.AsMemory(), repsBuffer.AsMemory(), cancellationToken);
+                data = new object?[positionCount];
+                var valueIndex = 0;
+                for (var i = 0; i < positionCount; i++)
+                {
+                    if (definitionLevels[i] == maxDefinitionLevel)
+                    {
+                        data[i] = NormalizeColumnValue(valuesBuffer[valueIndex++], timePrecision);
+                    }
+                    else
+                    {
+                        data[i] = DBNull.Value;
+                    }
+                }
+            }
+
+            return new RawColumnDataView
+            {
+                Data = data,
+                DefinitionLevels = definitionLevels,
+                RepetitionLevels = repetitionLevels
+            };
+        }
+
+        /// <summary>
+        /// Parquet.Net 6.x 以 ReadOnlyMemory&lt;char&gt;/ReadOnlyMemory&lt;byte&gt; 表达 string/byte[]，
+        /// 读取时统一转回引擎预期的 CLR 类型，保证与 DataTable 列类型一致。
+        /// </summary>
+        /// <param name="value">库返回的原始值</param>
+        /// <returns>规范化后的值（string/byte[]/原始值）</returns>
+        private static object? NormalizeColumnValue<T>(T value, Parquet.Schema.TimeUnitPrecision? timePrecision)
+        {
+            if (value is ReadOnlyMemory<char> chars)
+                return chars.Span.ToString();
+            if (value is ReadOnlyMemory<byte> bytes)
+                return bytes.ToArray();
+            if (timePrecision is not null && value is long rawTime)
+                return ConvertTimeValue(rawTime, timePrecision.Value);
+            return value;
+        }
+
+        /// <summary>
+        /// 将 Parquet.Net 6.x 返回的 TIME 原始整数值按精度换算为 TimeOnly（ticks 单位 100ns）。
+        /// </summary>
+        /// <param name="value">TIME 列的原始值（毫秒/微秒/纳秒）</param>
+        /// <param name="precision">时间精度</param>
+        /// <returns>对应的 TimeOnly</returns>
+        private static TimeOnly ConvertTimeValue(long value, Parquet.Schema.TimeUnitPrecision precision)
+        {
+            return precision switch
+            {
+                Parquet.Schema.TimeUnitPrecision.Millis => new TimeOnly(value * 10_000),
+                Parquet.Schema.TimeUnitPrecision.Micros => new TimeOnly(value * 10),
+                Parquet.Schema.TimeUnitPrecision.Nanos => new TimeOnly(value / 100),
+                _ => new TimeOnly(value),
+            };
+        }
     }
 }
+

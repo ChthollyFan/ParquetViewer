@@ -1,4 +1,4 @@
-﻿using Parquet.Meta;
+using Parquet.Meta;
 using Parquet.Schema;
 using ParquetViewer.Engine.Exceptions;
 using ParquetViewer.Engine.ParquetNET.Types;
@@ -185,13 +185,29 @@ namespace ParquetViewer.Engine.ParquetNET
 
         ICollection<IParquetSchemaElement> IParquetSchemaElement.Children => this.Children.ToList<IParquetSchemaElement>();
 
-        public System.Type ClrType => this.DataField?.ClrType ?? this.FieldType switch
+        public System.Type ClrType
         {
-            FieldTypeId.List => typeof(ListValue),
-            FieldTypeId.Map => typeof(MapValue),
-            FieldTypeId.Struct => typeof(StructValueExt),
-            _ => throw new InvalidOperationException("Cannot determine CLR type for primitive field without ClrType information."),
-        };
+            get
+            {
+                var clrType = this.DataField?.ClrType ?? this.FieldType switch
+                {
+                    FieldTypeId.List => typeof(ListValue),
+                    FieldTypeId.Map => typeof(MapValue),
+                    FieldTypeId.Struct => typeof(StructValueExt),
+                    _ => throw new InvalidOperationException("Cannot determine CLR type for primitive field without ClrType information."),
+                };
+
+                // Parquet.Net 6.x 将 string/byte[] 列映射为 ReadOnlyMemory<T>，这里还原为引擎预期的 CLR 类型
+                if (clrType == typeof(ReadOnlyMemory<char>))
+                    return typeof(string);
+                if (clrType == typeof(ReadOnlyMemory<byte>))
+                    return typeof(byte[]);
+                // 6.x 移除了 UseTimeOnlyTypeForTimeMicros/Millis 选项，TIME 列默认返回 Int64，这里还原为 TimeOnly
+                if (this.DataField is Parquet.Schema.TimeDataField)
+                    return typeof(TimeOnly);
+                return clrType;
+            }
+        }
 
         public object? LogicalType => LogicalTypeToJSONObject(this.SchemaElement.LogicalType);
 
