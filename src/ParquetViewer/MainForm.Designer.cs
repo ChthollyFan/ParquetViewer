@@ -74,6 +74,7 @@ namespace ParquetViewer
             languageToolStripMenuItem = new ToolStripMenuItem();
             englishToolStripMenuItem = new ToolStripMenuItem();
             turkishToolStripMenuItem = new ToolStripMenuItem();
+            chineseSimplifiedToolStripMenuItem = new ToolStripMenuItem();
             aboutToolStripMenuItem = new ToolStripMenuItem();
             showingRecordCountStatusBarLabel = new ToolStripStatusLabel();
             actualShownRecordCountLabel = new ToolStripStatusLabel();
@@ -364,7 +365,7 @@ namespace ParquetViewer
             // 
             // languageToolStripMenuItem
             // 
-            languageToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { englishToolStripMenuItem, turkishToolStripMenuItem });
+            languageToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { englishToolStripMenuItem, turkishToolStripMenuItem, chineseSimplifiedToolStripMenuItem });
             languageToolStripMenuItem.Image = Resources.Icons.localization_icon;
             languageToolStripMenuItem.Name = "languageToolStripMenuItem";
             resources.ApplyResources(languageToolStripMenuItem, "languageToolStripMenuItem");
@@ -382,6 +383,13 @@ namespace ParquetViewer
             resources.ApplyResources(turkishToolStripMenuItem, "turkishToolStripMenuItem");
             turkishToolStripMenuItem.Tag = "tr-TR";
             turkishToolStripMenuItem.Click += languageToolStripMenuItem_Click;
+            // 
+            // chineseSimplifiedToolStripMenuItem
+            // 
+            chineseSimplifiedToolStripMenuItem.Name = "chineseSimplifiedToolStripMenuItem";
+            resources.ApplyResources(chineseSimplifiedToolStripMenuItem, "chineseSimplifiedToolStripMenuItem");
+            chineseSimplifiedToolStripMenuItem.Tag = "zh-CN";
+            chineseSimplifiedToolStripMenuItem.Click += languageToolStripMenuItem_Click;
             // 
             // aboutToolStripMenuItem
             // 
@@ -536,6 +544,7 @@ namespace ParquetViewer
         private ToolStripMenuItem languageToolStripMenuItem;
         private ToolStripMenuItem englishToolStripMenuItem;
         private ToolStripMenuItem turkishToolStripMenuItem;
+        private ToolStripMenuItem chineseSimplifiedToolStripMenuItem;
         private Timer fileIntegrityCheckingTimer;
     }
 }
