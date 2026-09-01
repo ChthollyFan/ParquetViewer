@@ -1,5 +1,6 @@
 ﻿using Parquet;
 using Parquet.Meta;
+using Parquet.Data;
 using Parquet.Schema;
 using ParquetViewer.Engine.Exceptions;
 using ParquetViewer.Engine.Types;
@@ -9,7 +10,8 @@ namespace ParquetViewer.Engine.ParquetNET
 {
     public partial class ParquetEngine : IParquetEngine, IDisposable
     {
-        private static readonly ParquetOptions _defaultParquetOptions = new () { UseDateOnlyTypeForDates = true, UseTimeOnlyTypeForTimeMicros = true, UseTimeOnlyTypeForTimeMillis = true };
+        // Parquet.Net 6.x 移除了 UseTimeOnlyTypeForTimeMillis/Micros 选项，仅保留日期相关选项
+        private static readonly ParquetOptions _defaultParquetOptions = new() { UseDateOnlyTypeForDates = true };
         private readonly (string ParquetFilePath, ParquetReader Reader)[] _parquetFiles;
         private long? _recordCount;
 
@@ -156,7 +158,7 @@ namespace ParquetViewer.Engine.ParquetNET
                 //We found more than one type of schema.
                 foreach (var fileGroupList in fileGroups.Values)
                 {
-                    Engine.Helpers.EZDispose(fileGroupList.Select(f => f.Reader));
+                    DisposeReaders(fileGroupList.Select(f => f.Reader));
                 }
 
                 throw new MultipleSchemasFoundException(fileGroups.Keys.ToList()
@@ -165,7 +167,7 @@ namespace ParquetViewer.Engine.ParquetNET
             else if (skippedFiles.Count > 0)
             {
                 //We found one schema but some files couldn't be read
-                Engine.Helpers.EZDispose(fileGroups.Values.First().Select(f => f.Reader));
+                DisposeReaders(fileGroups.Values.First().Select(f => f.Reader));
                 throw new SomeFilesSkippedException(skippedFiles);
             }
 
@@ -201,9 +203,10 @@ namespace ParquetViewer.Engine.ParquetNET
             }
             var parquetSchema = new ParquetSchema(fields);
 
-            using var fs = new FileStream(path, FileMode.OpenOrCreate);
-            using var parquetWriter = await ParquetWriter.CreateAsync(parquetSchema, fs, cancellationToken: cancellationToken);
-            parquetWriter.CompressionLevel = System.IO.Compression.CompressionLevel.Optimal;
+            var writeOptions = new ParquetOptions { UseDateOnlyTypeForDates = true, CompressionLevel = System.IO.Compression.CompressionLevel.Optimal };
+            await using var fs = new FileStream(path, FileMode.OpenOrCreate);
+            // Parquet.Net 6.x 的 ParquetWriter 仅实现 IAsyncDisposable，且压缩级别通过 ParquetOptions 配置
+            await using var parquetWriter = await ParquetWriter.CreateAsync(parquetSchema, fs, writeOptions, false, cancellationToken);
             if (customMetadata is not null)
                 parquetWriter.CustomMetadata = customMetadata;
 
@@ -226,9 +229,10 @@ namespace ParquetViewer.Engine.ParquetNET
                     }
 
                     var type = dataField.IsNullable ? GetNullableVersion(dataField.ClrType) : dataField.ClrType;
+                    type = GetEngineClrType(type);
                     var values = GetColumnValues(dataTable, type, dataField.Name, batchIndex * MAX_ROWS_PER_ROWGROUP, MAX_ROWS_PER_ROWGROUP);
-                    var dataColumn = new Parquet.Data.DataColumn(dataField, values);
-                    await rowGroup.WriteColumnAsync(dataColumn, cancellationToken);
+                    // 6.x 以泛型 WriteAsync 取代 WriteColumnAsync(DataColumn)，按元素类型分派
+                    await WriteColumnValuesAsync(rowGroup, dataField, values, cancellationToken);
                     progress.Report(values.Length); //No way to report progress for each row, so do it by column
                     isLastBatch = values.Length < MAX_ROWS_PER_ROWGROUP;
                 }
@@ -236,7 +240,89 @@ namespace ParquetViewer.Engine.ParquetNET
             }
         }
 
-        public void Dispose() => Engine.Helpers.EZDispose(_parquetFiles.Select(f => f.Reader));
+        /// <summary>
+        /// 按列元素类型将值数组写入 row group（Parquet.Net 6.x 的泛型 WriteAsync 需按类型分派）。
+        /// </summary>
+        /// <param name="rowGroup">目标 row group</param>
+        /// <param name="dataField">目标字段</param>
+        /// <param name="values">列值数组，元素可能是 Nullable&lt;T&gt;</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>写入完成的任务</returns>
+        private static Task WriteColumnValuesAsync(ParquetRowGroupWriter rowGroup, DataField dataField, Array values, CancellationToken cancellationToken)
+        {
+            var elementType = values.GetType().GetElementType() ?? throw new InvalidOperationException("Column values cannot be empty");
+            if (elementType == typeof(string))
+            {
+                // string 列使用库提供的专用重载
+                return rowGroup.WriteAsync(dataField, (string[])values, null);
+            }
+            if (elementType == typeof(byte[]))
+            {
+                // byte[] 列使用库提供的专用重载（byte[][] 实现 IReadOnlyCollection<byte[]>）
+                var typedBytes = (byte[][])values;
+                return rowGroup.WriteAsync(dataField, typedBytes, null);
+            }
+            if (elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                var underlyingType = Nullable.GetUnderlyingType(elementType)!;
+                var nullableMethod = typeof(ParquetEngine).GetMethod(nameof(WriteNullableColumnValuesAsync),
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.MakeGenericMethod(underlyingType);
+                return (Task)nullableMethod.Invoke(null, new object[] { rowGroup, dataField, values, cancellationToken })!;
+            }
+            else
+            {
+                var method = typeof(ParquetEngine).GetMethod(nameof(WriteColumnValuesAsyncGeneric),
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.MakeGenericMethod(elementType);
+                return (Task)method.Invoke(null, new object[] { rowGroup, dataField, values, cancellationToken })!;
+            }
+        }
+
+        private static async Task WriteColumnValuesAsyncGeneric<T>(ParquetRowGroupWriter rowGroup, DataField dataField, Array values, CancellationToken cancellationToken) where T : struct
+        {
+            var typedValues = (T[])values;
+            await rowGroup.WriteAsync<T>(dataField, typedValues.AsMemory(), null, null, cancellationToken);
+        }
+
+        private static async Task WriteNullableColumnValuesAsync<T>(ParquetRowGroupWriter rowGroup, DataField dataField, Array values, CancellationToken cancellationToken) where T : struct
+        {
+            var typedValues = (T?[])values;
+            await rowGroup.WriteAsync<T>(dataField, (ReadOnlyMemory<T?>)typedValues.AsMemory(), null, null, cancellationToken);
+        }
+
+        /// <summary>
+        /// Parquet.Net 6.x 的 ParquetReader 仅实现 IAsyncDisposable，同步释放多个 reader。
+        /// </summary>
+        /// <param name="readers">待释放的 reader 序列</param>
+        private static void DisposeReaders(IEnumerable<ParquetReader> readers)
+        {
+            foreach (var reader in readers)
+            {
+                reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
+
+        /// <summary>
+        /// Parquet.Net 6.x 将 string/byte[] 列映射为 ReadOnlyMemory&lt;T&gt;，写入前还原为引擎预期类型。
+        /// </summary>
+        /// <param name="type">DataField.ClrType 或其它来源的 CLR 类型</param>
+        /// <returns>还原后的 CLR 类型</returns>
+        private static System.Type GetEngineClrType(System.Type type)
+        {
+            if (type == typeof(ReadOnlyMemory<char>))
+                return typeof(string);
+            if (type == typeof(ReadOnlyMemory<byte>))
+                return typeof(byte[]);
+            return type;
+        }
+
+        public void Dispose()
+        {
+            // Parquet.Net 6.x 的 ParquetReader 仅实现 IAsyncDisposable，这里以同步方式完成异步释放
+            foreach (var (_, reader) in _parquetFiles)
+            {
+                reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
 
         private static System.Type GetNullableVersion(System.Type sourceType) => sourceType == null
                 ? throw new ArgumentNullException(nameof(sourceType))
