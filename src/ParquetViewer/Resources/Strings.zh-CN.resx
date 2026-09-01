@@ -1,0 +1,348 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
+    <value>{0} 到 {1}</value>
+  </data>
+  <data name="LoadingDataLabelText" xml:space="preserve">
+    <value>正在加载数据</value>
+  </data>
+  <data name="CancelInitiatedLabelText" xml:space="preserve">
+    <value>正在取消...</value>
+  </data>
+  <data name="ExportingDataLabelText" xml:space="preserve">
+    <value>正在导出数据</value>
+  </data>
+  <data name="IndexingDataLabelText" xml:space="preserve">
+    <value>正在索引</value>
+  </data>
+  <data name="PrivacyPolicyLabelText" xml:space="preserve">
+    <value>隐私政策</value>
+  </data>
+  <data name="InvalidDateFormatErrorText" xml:space="preserve">
+    <value>无效的日期格式</value>
+  </data>
+  <data name="TooManyFieldsErrorFormat" xml:space="preserve">
+    <value>字段过多: {0}</value>
+  </data>
+  <data name="UnsupportedFieldCountTextFormat" xml:space="preserve">
+    <value>不支持: {0}</value>
+  </data>
+  <data name="SelectAllCheckmarkTextFormat" xml:space="preserve">
+    <value>全选 (数量: {0})</value>
+  </data>
+  <data name="DeselectAllCheckmarkTextFormat" xml:space="preserve">
+    <value>取消全选 (数量: {0})</value>
+  </data>
+  <data name="ThriftMetadataCopiedToClipboardMessage" xml:space="preserve">
+    <value>原始 Thrift 元数据已复制到剪贴板。</value>
+  </data>
+  <data name="SaveRawMetadataToFileDialogTitle" xml:space="preserve">
+    <value>保存原始元数据</value>
+  </data>
+  <data name="MetadataSuccessfullyExportedToFileMessageFormat" xml:space="preserve">
+    <value>元数据成功导出到: {0}</value>
+  </data>
+  <data name="MetadataSuccessfullyExportedToFileMessageTitle" xml:space="preserve">
+    <value>导出完成</value>
+  </data>
+  <data name="MainWindowOpenFileTitleFormat" xml:space="preserve">
+    <value>文件: {0}</value>
+  </data>
+  <data name="MainWindowOpenFolderTitleFormat" xml:space="preserve">
+    <value>文件夹: {0}</value>
+  </data>
+  <data name="QuerySyntaxHelpText" xml:space="preserve">
+    <value>NULL 检查: 
+    WHERE field_name IS NULL
+    WHERE field_name IS NOT NULL
+日期时间:   
+    WHERE field_name &gt;= #2000-12-31#
+    WHERE field_name = #2000-01-13 01:00:00#
+数值:
+    WHERE field_name &lt;= 123.4
+    WHERE (field1 * field2) / 100 &gt; 0.1
+字符串:
+    WHERE field_name LIKE '%value%' 
+    WHERE field_name = 'equals value'
+    WHERE field_name &lt;&gt; 'not equals'
+IN 检查:
+    WHERE field_name IN (value1, value2)
+    WHERE field_name NOT IN (value3, value4)
+多条件: 
+    WHERE (field_1 = 0 AND field_2 &lt;&gt; 'value') OR field_3 IS NULL
+
+更多信息请查看“帮助 → 用户指南”。</value>
+  </data>
+  <data name="QuerySyntaxHelpTitle" xml:space="preserve">
+    <value>过滤查询语法示例</value>
+  </data>
+  <data name="RecordsToBeExportedTitleFormat" xml:space="preserve">
+    <value>将导出 {0} 条记录</value>
+  </data>
+  <data name="ExportCancelledMessage" xml:space="preserve">
+    <value>导出已取消</value>
+  </data>
+  <data name="ExportCancelledTitle" xml:space="preserve">
+    <value>导出已取消</value>
+  </data>
+  <data name="ExportSuccessfulMessageFormat" xml:space="preserve">
+    <value>导出成功!
+
+文件大小: {0} MB</value>
+  </data>
+  <data name="ExportSuccessfulTitle" xml:space="preserve">
+    <value>成功</value>
+  </data>
+  <data name="SwitchFromXlsToXlsxMessageFormat" xml:space="preserve">
+    <value>{1} 文件每个单元格最多支持 {0} 个字符。
+
+是否改为导出为 {2} 文件?</value>
+  </data>
+  <data name="SwitchFromXlsToXlsxMessageTitle" xml:space="preserve">
+    <value>数据过大 - 切换导出类型?</value>
+  </data>
+  <data name="CreateTableScriptCopiedToClipboardMessage" xml:space="preserve">
+    <value>建表脚本已复制到剪贴板!</value>
+  </data>
+  <data name="CreateTableScriptFailedWithNoFieldsMessage" xml:space="preserve">
+    <value>请先选择一些字段以生成 SQL 脚本</value>
+  </data>
+  <data name="CopyToClipboardText" xml:space="preserve">
+    <value>复制</value>
+  </data>
+  <data name="CancelButtonText" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="CopyToClipboardWithHeadersText" xml:space="preserve">
+    <value>带表头复制</value>
+  </data>
+  <data name="CopyAsWhereConditionText" xml:space="preserve">
+    <value>复制为 WHERE...</value>
+  </data>
+  <data name="DecimalScientificFormatting" xml:space="preserve">
+    <value>科学计数</value>
+  </data>
+  <data name="DimensionsText" xml:space="preserve">
+    <value>尺寸</value>
+  </data>
+  <data name="TypeText" xml:space="preserve">
+    <value>类型</value>
+  </data>
+  <data name="SaveImageToFileButtonTextFormat" xml:space="preserve">
+    <value>保存为 {0}</value>
+  </data>
+  <data name="CantGoBackLinkButtonText" xml:space="preserve">
+    <value>无法返回</value>
+  </data>
+  <data name="SaveImageAsButtonText" xml:space="preserve">
+    <value>将图片保存为 {0}</value>
+  </data>
+  <data name="ImageSavedToDiskMessage" xml:space="preserve">
+    <value>图片已保存到 {0}</value>
+  </data>
+  <data name="ImageSavedToDiskTitle" xml:space="preserve">
+    <value>保存完成</value>
+  </data>
+  <data name="DecimalFormatting" xml:space="preserve">
+    <value>十进制</value>
+  </data>
+  <data name="LanguageChangeConfirmationTitle" xml:space="preserve">
+    <value>重启 ParquetViewer?</value>
+  </data>
+  <data name="LanguageChangeConfirmationMessage" xml:space="preserve">
+    <value>更改语言需要重启应用程序。是否继续?</value>
+  </data>
+  <data name="DotNetDateFormatHelpUrl" xml:space="preserve">
+    <value>https://docs.microsoft.com/zh-cn/dotnet/standard/base-types/custom-date-and-time-format-strings</value>
+  </data>
+  <data name="AnalyticsConsentPromptMessage" xml:space="preserve">
+    <value>是否愿意共享匿名使用数据以帮助改进 ParquetViewer?
+
+你随时可以在“帮助”菜单中更改此设置。</value>
+  </data>
+  <data name="AnalyticsConsentPromptTitle" xml:space="preserve">
+    <value>共享匿名使用数据?</value>
+  </data>
+  <data name="FileExtensionAssociationPromptMessageFormat" xml:space="preserve">
+    <value>是否将 ParquetViewer 与 .parquet 文件关联?
+
+可执行文件路径: {0}
+
+你也可以在“帮助 → 关于”页面切换此设置。</value>
+  </data>
+  <data name="FileExtensionAssociationPromptTitle" xml:space="preserve">
+    <value>ParquetViewer 文件关联请求</value>
+  </data>
+  <data name="FileExtensionAssociationCancelledMessage" xml:space="preserve">
+    <value>文件关联已取消。如果你改变主意，可以在“帮助 → 关于”页面修改 .parquet 文件关联。</value>
+  </data>
+  <data name="FileExtensionAssociationCancelledTitle" xml:space="preserve">
+    <value>文件关联已取消</value>
+  </data>
+  <data name="FileExtensionAssociationFailedMessageFormat" xml:space="preserve">
+    <value>出错了 (错误代码: {0})。
+
+你可以从“帮助 → 关于”页面重试。</value>
+  </data>
+  <data name="FileExtensionAssociationFailedTitle" xml:space="preserve">
+    <value>文件关联失败</value>
+  </data>
+  <data name="FileExtensionAssociationSucceededMessage" xml:space="preserve">
+    <value>成功! ParquetViewer 现在是 .parquet 文件的默认应用程序。</value>
+  </data>
+  <data name="FileExtensionAssociationSucceededTitle" xml:space="preserve">
+    <value>文件关联成功</value>
+  </data>
+  <data name="DarkModePromptMessage" xml:space="preserve">
+    <value>是否在深色模式下使用 ParquetViewer?
+
+你随时可以在“编辑”菜单中开启/关闭此选项。</value>
+  </data>
+  <data name="DarkModePromptTitle" xml:space="preserve">
+    <value>切换到深色模式?</value>
+  </data>
+  <data name="QueryRunningStatusText" xml:space="preserve">
+    <value>运行中:</value>
+  </data>
+  <data name="QueryFinishedStatusText" xml:space="preserve">
+    <value>已完成:</value>
+  </data>
+  <data name="QueryZoomStatusTextFormat" xml:space="preserve">
+    <value>查询缩放: {0}%</value>
+  </data>
+  <data name="ByteArraysNotSupportedErrorMessage" xml:space="preserve">
+    <value>很遗憾，查询结果目前不支持 byte[] 类型。相关值将显示为 null。</value>
+  </data>
+  <data name="ByteArraysNotSupportedErrorTitle" xml:space="preserve">
+    <value>不支持 byte 数组</value>
+  </data>
+  <data name="FrozenColumnText" xml:space="preserve">
+    <value>冻结</value>
+  </data>
+  <data name="OpenFileNoLongerExistsTitleSuffix" xml:space="preserve">
+    <value>已删除</value>
+  </data>
+  <data name="OpenFileWasModifiedTitleSuffix" xml:space="preserve">
+    <value>已修改</value>
+  </data>
+  <data name="WordWrapContextMenuItemText" xml:space="preserve">
+    <value>自动换行</value>
+  </data>
+</root>
