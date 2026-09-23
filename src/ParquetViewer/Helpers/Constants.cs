@@ -13,7 +13,8 @@ namespace ParquetViewer.Helpers
 {
     public static class Constants
     {
-        public const string WikiURL = "https://github.com/mukunku/ParquetViewer/wiki";
+        //本仓库是 mukunku/ParquetViewer 的衍生项目，用户指南与文档均以本仓库 Wiki 为准，避免跳转到上游项目
+        public const string WikiURL = "https://github.com/ChthollyFan/ParquetViewer/wiki";
         public const string DuckDBSqlSyntaxURL = "https://duckdb.org/docs/stable/sql/query_syntax/select";
     }
 
@@ -45,7 +46,8 @@ namespace ParquetViewer.Helpers
         #endregion
 
         #region Latest Release Version
-        private const string RELEASES_API_URL = "https://api.github.com/repos/mukunku/ParquetViewer/releases";
+        //"最新版本"指的是本应用的发布版本，因此只能查询本仓库的 releases，查询上游仓库会返回与本应用无关的旧版本号
+        private const string RELEASES_API_URL = "https://api.github.com/repos/ChthollyFan/ParquetViewer/releases";
         private static SemanticVersion? _latestReleaseVersion = null;
         private static Uri? _releaseUri = null;
         private static DateTime? _latestReleaseLastCheckedOn = null;

@@ -124,7 +124,7 @@
     <value>版权</value>
   </data>
   <data name="labelCompanyName.Text" xml:space="preserve">
-    <value>作者: Mukunku</value>
+    <value>原作者: Mukunku ｜ 维护者: ChthollyFan</value>
   </data>
   <data name="associateFileExtensionCheckBox.Text" xml:space="preserve">
     <value>与 .parquet 文件关联</value>

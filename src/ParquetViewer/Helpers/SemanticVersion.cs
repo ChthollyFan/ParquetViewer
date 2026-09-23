@@ -128,6 +128,10 @@ namespace ParquetViewer.Helpers
         }
 
         public override string ToString()
-            => $"{this.Major}.{this.Minor}.{this.Patch}.{this.Build}";
+            //Build 为 0 时只输出 3 位版本号（如 4.3.0），与 GitHub Release 的 tag 形式保持一致；
+            //Build 非 0（如 4.3.0.1）时仍输出 4 位，避免丢失版本信息
+            => this.Build == 0
+                ? $"{this.Major}.{this.Minor}.{this.Patch}"
+                : $"{this.Major}.{this.Minor}.{this.Patch}.{this.Build}";
     }
 }
