@@ -208,8 +208,10 @@ namespace ParquetViewer
                     this.newVersionLabel.Tag = latestRelease.Url;
                     this.newVersionLabel.Image = Resources.Icons.external_link_icon;
                 }
-                else if (latestRelease.Version == Env.AssemblyVersion)
+                else
                 {
+                    //远端最新版本不高于当前版本时禁用链接。除版本相同外还包含远端版本落后于本应用、
+                    //以及远端版本获取失败（Version 为 null）两种情况，否则会显示一个点击无反应的"最新版本"链接
                     this.newVersionLabel.Enabled = false;
                 }
             }

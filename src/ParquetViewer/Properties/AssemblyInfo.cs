@@ -4,10 +4,12 @@ using System.Runtime.Versioning;
 
 [assembly: AssemblyTitle("ParquetViewer")]
 [assembly: AssemblyDescription("Simple Windows desktop application for viewing Apache Parquet files\r\n" +
-    "https://github.com/mukunku/ParquetViewer\r\n\r\n" +
-    "Privacy policy: https://github.com/mukunku/ParquetViewer/wiki/Privacy-Policy")]
+    "用于查看与查询 Apache Parquet 文件的 Windows 桌面工具。\r\n" +
+    "https://github.com/ChthollyFan/ParquetViewer\r\n\r\n" +
+    "Privacy policy: https://github.com/ChthollyFan/ParquetViewer/wiki/Privacy-Policy")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Author: Mukunku")]
+//本仓库为 mukunku/ParquetViewer 的衍生项目：原作者为 Mukunku，本仓库由 ChthollyFan 继续维护
+[assembly: AssemblyCompany("Maintainer: ChthollyFan (original author: Mukunku)")]
 [assembly: AssemblyProduct("ParquetViewer")]
 [assembly: AssemblyCopyright("GNU General Public License v3.0")]
 [assembly: AssemblyTrademark("")]
