@@ -171,6 +171,28 @@ namespace ParquetViewer
             }
         }
 
+        /// <summary>
+        /// 从搜索框读取并规范化查询条件：去掉 WHERE 前缀，并将 list/map/struct/bytearray 等复杂列转换为字符串比较
+        /// </summary>
+        /// <returns>规范化后的查询条件；搜索框无有效内容时返回空字符串</returns>
+        private string GetFilterQueryFromTextBox()
+        {
+            string queryText = this.searchFilterTextBox.Text ?? string.Empty;
+            queryText = QueryUselessPartRegex().Replace(queryText, string.Empty).Trim();
+
+            //Treat list, map, and struct types as strings by casting them automatically
+            foreach (var complexField in this.mainGridView.Columns.OfType<DataGridViewColumn>()
+                .Where(c => c.ValueType.ImplementsInterface<IListValue>() || c.ValueType.ImplementsInterface<IMapValue>()
+                    || c.ValueType.ImplementsInterface<IStructValue>() || c.ValueType.ImplementsInterface<IByteArrayValue>())
+                .Select(c => c.Name))
+            {
+                //This isn't perfect but it should handle most cases
+                queryText = queryText.Replace(complexField, $"CONVERT({complexField}, System.String)", StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            return queryText;
+        }
+
         private void runQueryButton_Click(object sender, EventArgs? e)
         {
             try
@@ -178,18 +200,7 @@ namespace ParquetViewer
                 if (!this.IsAnyFileOpen || this.MainDataSource is null)
                     return;
 
-                string queryText = this.searchFilterTextBox.Text ?? string.Empty;
-                queryText = QueryUselessPartRegex().Replace(queryText, string.Empty).Trim();
-
-                //Treat list, map, and struct types as strings by casting them automatically
-                foreach (var complexField in this.mainGridView.Columns.OfType<DataGridViewColumn>()
-                    .Where(c => c.ValueType.ImplementsInterface<IListValue>() || c.ValueType.ImplementsInterface<IMapValue>()
-                        || c.ValueType.ImplementsInterface<IStructValue>() || c.ValueType.ImplementsInterface<IByteArrayValue>())
-                    .Select(c => c.Name))
-                {
-                    //This isn't perfect but it should handle most cases
-                    queryText = queryText.Replace(complexField, $"CONVERT({complexField}, System.String)", StringComparison.InvariantCultureIgnoreCase);
-                }
+                string queryText = GetFilterQueryFromTextBox();
 
                 if (string.IsNullOrWhiteSpace(queryText)
                     || this.MainDataSource.DefaultView.RowFilter == queryText) //No need to execute the same query again
