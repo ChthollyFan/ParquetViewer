@@ -29,7 +29,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Restore dependencies
       run: dotnet restore src/ParquetViewer.sln
@@ -42,7 +42,7 @@ jobs:
 
     - name: Test Report
       uses: bibipkins/dotnet-test-reporter@v1.6.1
-      if: github.repository == 'mukunku/ParquetViewer'
+      if: github.repository == 'ChthollyFan/ParquetViewer'
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         comment-title: 'Unit Test Results'
@@ -51,7 +51,7 @@ jobs:
   checkPublish:
     runs-on: windows-latest
     needs: test
-    if: github.repository == 'mukunku/ParquetViewer' && github.event.pull_request.draft == false
+    if: github.repository == 'ChthollyFan/ParquetViewer' && github.event.pull_request.draft == false
     outputs:
       release_version: ${{ steps.release-version.outputs.release_version }}
       should_publish: ${{ steps.should-publish.outputs.should_publish }}
@@ -99,7 +99,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Inject Amplitude API Key
         uses: richardrigutins/replace-in-files@v2
@@ -123,34 +123,11 @@ jobs:
           Move-Item -Path "publish/ParquetViewer.exe" -Destination "./ParquetViewer.exe"
           Move-Item -Path "publish_selfcontained/ParquetViewer.exe" -Destination "./ParquetViewer_SelfContained.exe"
 
-      - name: Upload unsigned artifact for signing
-        id: upload-unsigned-artifact
-        uses: actions/upload-artifact@v6
-        with:
-          path: |
-            ParquetViewer.exe
-            ParquetViewer_SelfContained.exe
-
-      - name: Remove unsigned exe's for safety
-        run: |
-          Remove-Item -Path "ParquetViewer.exe"
-          Remove-Item -Path "ParquetViewer_SelfContained.exe"
-
-      # Documentation: https://about.signpath.io/documentation/trusted-build-systems/github
-      - name: Submit signing request to SignPath.io
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '5ceccea7-c3e7-4165-8c2e-adab8679db20'
-          project-slug: 'ParquetViewer'
-          signing-policy-slug: 'release-signing'
-          github-artifact-id: '${{ steps.upload-unsigned-artifact.outputs.artifact-id }}'
-          wait-for-completion: true
-          output-artifact-directory: '/signed-package'
-
+      # 上游的 SignPath 代码签名配置属于 mukunku 账号，本仓库无法复用其令牌与配置，
+      # 因此跳过签名环节，直接上传构建产物创建 Release（exe 为未签名状态）
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "/signed-package/ParquetViewer.exe,/signed-package/ParquetViewer_SelfContained.exe"
+          artifacts: "ParquetViewer.exe,ParquetViewer_SelfContained.exe"
           body: "PR: #${{ env.PR_NUMBER }}"
           allowUpdates: ${{ env.BRANCH_NAME != 'main' }}
           omitBodyDuringUpdate: true
