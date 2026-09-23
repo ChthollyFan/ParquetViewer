@@ -368,6 +368,9 @@ namespace ParquetViewer
 
                 this.MainDataSource = finalResult;
                 wasSuccessful = true;
+
+                //重新加载数据会用新的 DataTable 替换旧表导致过滤条件丢失，此处自动重新应用搜索框中的查询
+                TryApplyFilterAutomatically();
             }
             catch (AllFilesSkippedException ex)
             {
@@ -436,6 +439,36 @@ namespace ParquetViewer
                         (long)renderTime.TotalMilliseconds,
                         engineType);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 数据重新加载后自动重新应用搜索框中的查询条件，避免范围变化后用户需要手动再次点击执行
+        /// </summary>
+        /// <remarks>查询仅对当前加载到内存中的行生效；自动应用失败时静默恢复为无过滤，不打断加载流程</remarks>
+        private void TryApplyFilterAutomatically()
+        {
+            if (this.MainDataSource is null)
+                return;
+
+            string queryText = GetFilterQueryFromTextBox();
+            if (string.IsNullOrWhiteSpace(queryText))
+                return;
+
+            try
+            {
+                this.Cursor = Cursors.WaitCursor;
+                this.MainDataSource.DefaultView.RowFilter = queryText;
+            }
+            catch
+            {
+                //自动应用失败时静默恢复为无过滤，不打断加载流程；用户手动执行时仍可看到具体的错误提示
+                this.MainDataSource.DefaultView.RowFilter = null;
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
+                this.actualShownRecordCountLabel.Text = this.MainDataSource.DefaultView.Count.ToString();
             }
         }
 
