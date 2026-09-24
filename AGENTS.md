@@ -73,7 +73,7 @@ $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF
 
 ## 版本号
 
-- 唯一版本来源是 `src/ParquetViewer/Properties/AssemblyInfo.cs` 的 `AssemblyVersion`，写满 4 段（`4.3.0.0`）—— CI 用正则 `(\d+(\.\d+){3})` 从该行提取版本号来生成 tag。
+- 唯一版本来源是 `src/ParquetViewer/Properties/AssemblyInfo.cs` 的 `AssemblyVersion`，写满 4 段（`4.4.0.0`）—— CI 用正则 `(\d+\.\d+\.\d+)` 从该行提取主.次.修订三段来拼 tag，所以 tag 是 `v4.4.0` 而不是 `v4.4.0.0`。
 - `SemanticVersion.ToString()` 在 `Build == 0` 时输出 3 段（`4.3.0`），界面与上报因此显示 3 段；`Build != 0` 时保留 4 段。改这条规则要同步 `ParquetViewer.Tests/HelperTests.cs`。
 - Release tag 用 `v{主}.{次}.{修订}`（`v4.3.0`），与程序版本数值一致即可，"帮助 → 关于"据此判断有没有新版本。
 - "帮助 → 关于"的最新版本取自 `Helpers/Constants.cs` 的 `RELEASES_API_URL`（本仓库 releases）。发布新版本 = 改 `AssemblyVersion` + 建同数值 tag。
@@ -92,11 +92,108 @@ $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF
 
 ## 发布
 
+### 发布流程
+
+发版 = **改版本号 → 提交 → 打 tag → 推送 → 创建 Release**，缺一不可：
+
+```powershell
+# 1. 改 src\ParquetViewer\Properties\AssemblyInfo.cs 的 AssemblyVersion（例：4.4.0.0）
+#    版本号怎么涨：新增功能涨次版本（4.3.0.0 → 4.4.0.0），仅缺陷修复涨修订号（→ 4.3.1.0）
+
+# 2. 提交版本号改动
+git add -- src/ParquetViewer/Properties/AssemblyInfo.cs
+git commit -m "chore(release): 版本号提升至 4.4.0"
+
+# 3. 打 tag：三段形式，与 AssemblyVersion 的前三段数值一致
+git tag v4.4.0
+
+# 4. 推送提交与 tag（两者都要推，tag 不会随分支一起推送）
+git push origin main
+git push origin v4.4.0
+
+# 5. 构建产物并创建 Release（见下两节）
+```
+
+- tag 必须指向含该版本号提交的 commit：`git show --stat v4.4.0` 应能看到 `AssemblyInfo.cs` 的版本号改动。
+- 用轻量 tag（`git tag vX.Y.Z`，不加 `-a`），与现存 tag 保持一致。
+- tag 一旦推送就不要再移动或删除：程序"帮助 → 关于"按 tag 显示并比较版本。
+
+### 构建产物
+
+本机构建命令与 CI 一致（产物未签名）：
+
+```powershell
+$dotnet = Join-Path $env:USERPROFILE "scoop\apps\dotnet-sdk\current\dotnet.exe"
+
+# 常规版：需要目标机器安装 .NET 10 Desktop Runtime
+& $dotnet publish src\ParquetViewer\ParquetViewer.csproj -c Release -f net10.0-windows --nologo -o publish -r win-x64 --no-self-contained --no-restore
+
+# 自包含版：不需要安装运行时
+& $dotnet publish src\ParquetViewer\ParquetViewer.csproj -c Release_SelfContained -f net10.0-windows --nologo -o publish_selfcontained -r win-x64 --self-contained --no-restore
+```
+
+- `publish/` 已在 `.gitignore` 中；`publish_selfcontained/` **没有**被忽略，构建完要清理，别让它出现在 `git status` 里。
+- 上传前核对 `(Get-Item publish\ParquetViewer.exe).VersionInfo.FileVersion` 与 tag 数值一致。
+- 上传的文件名固定为 `ParquetViewer.exe` 与 `ParquetViewer_SelfContained.exe`，与 CI 产出一致。
+
+### 创建 Release
+
+用 `gh` CLI（本机已登录）。没有 `gh` 时不要试图调用 GitHub API，更不要从 Windows 凭据管理器提取 Git 的令牌：
+
+```powershell
+gh release create v4.4.0 --title "v4.4.0" --notes-file publish\RELEASE_NOTES_v4.4.0.md "publish\ParquetViewer.exe" "publish\ParquetViewer_SelfContained.exe"
+
+# 说明写错时只更新说明，不必重建 Release
+gh release edit v4.4.0 --notes-file publish\RELEASE_NOTES_v4.4.0.md
+
+# 产物需要重传时
+gh release upload v4.4.0 <文件> --clobber
+```
+
+- 手动发布的是**正式 Release**（不加 `--prerelease`）；CI 从 PR 创建的 Release 是 prerelease。程序"帮助 → 关于"读的是 releases 列表，两者都能识别，但正式版本语义更正确。
+- 创建后核对：`gh release list` 里该版本带 `Latest` 标记，`gh release view v4.4.0 --json assets` 里两个产物都存在。
+
+### Release 说明写什么
+
+说明要覆盖**上一个 tag 到本次 tag 之间的全部提交**，不能只写当次改动。先列提交、再读完整提交信息，逐条归类：
+
+```powershell
+git log --oneline --no-merges v4.3.0..v4.4.0
+git log --format="%h %s%n%b" --no-merges v4.3.0..v4.4.0
+```
+
+章节顺序固定为：
+
+```markdown
+## ParquetViewer v4.4.0
+
+Windows 桌面端 Apache Parquet 文件查看与查询工具（中文版发布）。
+
+本版本包含自 v4.3.0 以来的全部改动。
+
+### 新增功能
+### 性能优化
+### 问题修复
+### 其他变更
+### 使用说明
+### 已知限制
+
+更多文档见仓库 Wiki：https://github.com/ChthollyFan/ParquetViewer/wiki
+```
+
+- 每条写清"改了什么、为什么改、对用户的影响"；性能数据要带上实测样本条件，不要只给结论。
+- `ci:` / `docs:` / `chore:` 这类内部改动归入「其他变更」，但**不能省略**。
+- 「使用说明」沿用历史 Release 的固定写法（常规版需要 .NET 10 Desktop Runtime、自包含版不需要，加上打开方式与功能概述）。
+- 写完核对界面文案：说明里提到的按钮名、菜单名要与 `*.zh-CN.resx` 里的实际文本一致。
+- 说明文本同时留一份在 `publish/RELEASE_NOTES_vX.Y.Z.md`（该目录被忽略），方便后续用 `gh release edit` 微调。
+
+### CI 发布流程
+
 `.github/workflows/build-test-publish.yaml` 已面向本仓库：`dotnet-version` 为 10.0.x，`Test Report` 与 `checkPublish` 的判断条件为 `ChthollyFan/ParquetViewer`，`publish` 构建常规版与 Self-Contained 版两个 exe 后直接创建 Release —— 上游的 SignPath 签名环节已移除，产物未签名。
 
-- PR 触发；同 tag 的 Release 已存在时 `checkPublish` 会跳过发布。
+- **只监听 `pull_request` 事件**：推送 tag 不会触发 CI，手动发布的 tag 与 Release 都要自己创建（见上文）。
+- 同 tag 的 Release 已存在时 `checkPublish` 会跳过发布；它从 `src/ParquetViewer/Properties/AssemblyInfo.cs` 提取版本号拼 tag，正则只取三段，所以 CI 生成的也是 `vX.Y.Z`。
 - 本仓库已彻底移除匿名使用数据上报（Analytics/Amplitude），构建流程中不再有 `Inject Amplitude API Key` 步骤。
-- 常规版 exe 需要目标机器安装 .NET 10 Desktop Runtime，Self-Contained 版不需要。
 
 ## 提交
 
