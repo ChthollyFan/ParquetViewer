@@ -191,6 +191,36 @@ namespace ParquetViewer.Engine.ParquetNET
             }
         }
 
+        /// <summary>
+        /// 为并行分片额外打开一个独立的 ParquetReader。
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>独占该文件流的 reader，由调用方负责释放</returns>
+        /// <remarks>
+        /// ParquetRowGroupReader 共享底层流并依赖流位置，多个线程并发读取同一个 reader 会互相破坏读位置，
+        /// 因此并行分片必须各自持有独立 reader。目前仅支持单文件引擎。
+        /// </remarks>
+        private async Task<ParquetReader> OpenAdditionalReaderAsync(CancellationToken cancellationToken)
+        {
+            if (this._parquetFiles.Length != 1)
+            {
+                throw new InvalidOperationException("Additional readers are only supported for single file parquet engines");
+            }
+
+            // 每个 reader 使用独立的 ParquetOptions 实例，避免多个 reader 共享同一个可变配置对象
+            var options = new ParquetOptions { UseDateOnlyTypeForDates = _defaultParquetOptions.UseDateOnlyTypeForDates };
+            var readOnlyNonLockingStream = new FileStream(this._parquetFiles[0].ParquetFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            try
+            {
+                return await ParquetReader.CreateAsync(readOnlyNonLockingStream, options, false, cancellationToken);
+            }
+            catch
+            {
+                readOnlyNonLockingStream.Dispose();
+                throw;
+            }
+        }
+
         public async Task WriteDataToParquetFileAsync(DataTable dataTable, string path,
             CancellationToken cancellationToken, IProgress<int> progress, Dictionary<string, string>? customMetadata)
         {

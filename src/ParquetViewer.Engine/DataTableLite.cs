@@ -53,6 +53,21 @@ namespace ParquetViewer.Engine
             _rows.Add(row);
         }
 
+        /// <summary>
+        /// 预分配行容量，避免逐行扩容。
+        /// </summary>
+        /// <param name="expectedRowCount">预期行数</param>
+        /// <remarks>并行分片是先克隆出列定义、再确定行数，用它一次性预留底层数组容量。</remarks>
+        public void EnsureCapacity(int expectedRowCount)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(expectedRowCount);
+
+            if (expectedRowCount > this._rows.Count)
+            {
+                this._rows.EnsureCapacity(expectedRowCount);
+            }
+        }
+
         public DataTable ToDataTable(CancellationToken token, IProgress<int>? progress = null)
         {
             var dataTable = new DataTable();
@@ -131,6 +146,45 @@ namespace ParquetViewer.Engine
                 clone.AddColumn(column.Name, column.Type, column.ParentSchema);
             }
             return clone;
+        }
+
+        /// <summary>
+        /// 把另一个结构相同的 DataTableLite 的所有行追加到当前表末尾。
+        /// </summary>
+        /// <param name="source">来源表，列的数量、名称与类型必须与当前表一致</param>
+        /// <remarks>
+        /// 只做行数组的引用拷贝，不复制单元格内容，用于并行分片读取后按分片顺序合并结果。
+        /// 合并顺序由调用方保证，本方法不做任何排序。
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">列数量或列类型不一致时抛出</exception>
+        public void AppendRowsFrom(DataTableLite source)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+
+            if (source._columns.Count != this._columns.Count)
+            {
+                throw new InvalidOperationException($"Column count mismatch when appending rows: {source._columns.Count} vs {this._columns.Count}");
+            }
+
+            foreach (var column in this._columns)
+            {
+                if (!source._columns.TryGetValue(column.Key, out var sourceColumn))
+                {
+                    throw new InvalidOperationException($"Column `{column.Key}` is missing in the source table");
+                }
+
+                if (sourceColumn.Type != column.Value.Type)
+                {
+                    throw new InvalidOperationException($"Column `{column.Key}` type mismatch when appending rows: {sourceColumn.Type} vs {column.Value.Type}");
+                }
+            }
+
+            if (source._rows.Count == 0)
+            {
+                return;
+            }
+
+            this._rows.AddRange(source._rows);
         }
     }
 
