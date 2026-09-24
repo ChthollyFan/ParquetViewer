@@ -14,7 +14,9 @@ namespace ParquetViewer.Helpers
 {
     public static class ExtensionMethods
     {
-        private const string DefaultDateTimeFormat = "g";
+        // 默认改用 .NET "G"（通用完整日期时间）而非 "g"（通用短日期时间）：
+        // "g" 在绝大多数区域下只显示到分钟，导致含秒及更高精度的时间戳（如 timestamp[ns]）丢失秒数信息
+        private const string DefaultDateTimeFormat = "G";
         private const string DefaultDateOnlyFormat = "d";
         private const string DefaultTimeOnlyFormat = "T";
         public const string ISO8601DateTimeFormat = "yyyy-MM-ddTHH:mm:ss.FFFFFFF";

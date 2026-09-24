@@ -350,3 +350,6 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+# 代码改动验证用的 git worktree 副本（见 AGENTS.md「改动流程」）
+.worktrees/
