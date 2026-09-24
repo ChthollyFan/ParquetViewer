@@ -126,8 +126,8 @@
     <comment>Title of the confirmation dialog shown when a file exceeds the single-load row limit</comment>
   </data>
   <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
-    <value>{0} to {1}</value>
-    <comment>This is the value shown in the bottom right status bar once records are loaded from a parquet file. Example: "0 to 1000"</comment>
+    <value>Rows {0} to {1}</value>
+    <comment>This is the value shown in the bottom right status bar once records are loaded from a parquet file. Row numbers are 1-based. Example: "Rows 1 to 1000"</comment>
   </data>
   <data name="LoadingDataLabelText" xml:space="preserve">
     <value>Loading Data</value>

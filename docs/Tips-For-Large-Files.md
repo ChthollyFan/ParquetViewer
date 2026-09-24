@@ -14,10 +14,10 @@
 
 如果 Parquet 文件记录过多，可能无法一次性全部加载到内存中。
 
-此时可以设置 [记录数量](Basics.md#记录数量行数) 为你电脑能承受的值：
+此时可以设置 [显示行数](Basics.md#显示行数) 为你电脑能承受的值：
 
 ![](https://github.com/ChthollyFan/ParquetViewer/blob/main/wiki_images/recordcount.png)
 
-然后利用 [记录偏移](Basics.md#记录偏移浏览文件) 字段浏览文件：
+然后利用 [起始行](Basics.md#起始行浏览文件) 字段浏览文件：
 
 ![](https://github.com/ChthollyFan/ParquetViewer/blob/main/wiki_images/recordoffset.png)

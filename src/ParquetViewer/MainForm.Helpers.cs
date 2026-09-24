@@ -6,6 +6,7 @@ using ParquetViewer.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -34,6 +35,40 @@ namespace ParquetViewer
 
             loadingIcon.Show();
             return loadingIcon;
+        }
+
+        private static Image? s_previousPageEnabledIcon;
+        private static Image? s_previousPageDisabledIcon;
+
+        /// <summary>
+        /// 取得“上一页”按钮的箭头图标（由“下一页”的箭头图标水平镜像而来）
+        /// </summary>
+        /// <param name="isEnabled">按钮是否可用，决定返回蓝色图标还是灰色图标</param>
+        /// <returns>镜像后的图标，同一进程内只创建一次</returns>
+        /// <remarks>
+        /// 图标资源实例会被多个按钮共用，因此必须复制之后再翻转，
+        /// 否则会连“下一页”“加载全部”两个按钮的图标一起翻转。
+        /// </remarks>
+        private static Image GetPreviousPageIcon(bool isEnabled)
+        {
+            if (isEnabled)
+            {
+                return s_previousPageEnabledIcon ??= CreateMirroredIcon(Resources.Icons.next_blue);
+            }
+
+            return s_previousPageDisabledIcon ??= CreateMirroredIcon(Resources.Icons.next_disabled);
+        }
+
+        /// <summary>
+        /// 复制一份位图并做水平镜像
+        /// </summary>
+        /// <param name="source">原始位图</param>
+        /// <returns>水平镜像后的新位图</returns>
+        private static Image CreateMirroredIcon(Image source)
+        {
+            var mirrored = new Bitmap(source);
+            mirrored.RotateFlip(RotateFlipType.RotateNoneFlipX);
+            return mirrored;
         }
 
         //TODO: Should we export floats and binary data with custom formatting if activated?

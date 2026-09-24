@@ -124,7 +124,7 @@
     <value>Büyük dosya</value>
   </data>
   <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
-    <value>{0} - {1}</value>
+    <value>Satır {0} - {1}</value>
   </data>
   <data name="LoadingDataLabelText" xml:space="preserve">
     <value>Veri Yükleniyor</value>

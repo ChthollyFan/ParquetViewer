@@ -19,6 +19,11 @@ namespace ParquetViewer
         private const int DefaultRowCountValue = 1000;
 
         /// <summary>
+        /// 界面上的起始行号从 1 起算，内部偏移量仍按 0 起算传给引擎，只在界面层做换算
+        /// </summary>
+        private const int FirstRowNumber = 1;
+
+        /// <summary>
         /// 单次加载行数的硬上限。
         /// 千万行级别的文件一次性载入需要上百 GB 内存，会直接让进程 OOM 崩溃，
         /// 因此无论从哪个入口（加载全部行按钮、记录数量输入框、总是加载全部记录设置）都不允许越过这个值。
@@ -51,8 +56,10 @@ namespace ParquetViewer
                 this.MainDataSource = null;
                 this.loadAllRowsButton.Enabled = false;
                 this.nextOffsetButton.Enabled = false;
+                this.previousOffsetButton.Enabled = false;
                 this.searchFilterTextBox.PlaceholderText = "WHERE ";
-                this.offsetTextBox.SetTextQuiet(DefaultOffset.ToString());
+                // 切换文件后起始行复位到第 1 行
+                this.offsetTextBox.SetTextQuiet(FirstRowNumber.ToString());
                 this.currentOffset = DefaultOffset;
                 this.mainGridView.ClearQuickPeekForms();
                 this.mainGridView.ClearColumnFormatOverrides();
@@ -114,6 +121,41 @@ namespace ParquetViewer
             }
         }
 
+        /// <summary>
+        /// 界面上的起始行号，从 1 起算（即当前偏移量加 1）
+        /// </summary>
+        private int CurrentStartRow => this.CurrentOffset + FirstRowNumber;
+
+        /// <summary>
+        /// 把界面输入的起始行号钳制到当前文件的合法范围内
+        /// </summary>
+        /// <param name="startRow">界面输入的起始行号（1 起算）</param>
+        /// <returns>已打开文件时不超过文件总行数，且始终不小于第 1 行</returns>
+        private int ClampStartRow(int startRow)
+        {
+            if (startRow < FirstRowNumber)
+            {
+                return FirstRowNumber;
+            }
+
+            // 尚未打开文件时没有上限可依据，只保证不小于第 1 行
+            if (this._openParquetEngine is null)
+            {
+                return startRow;
+            }
+
+            long recordCount = this._openParquetEngine.RecordCount;
+
+            // 空文件没有任何可停在的行，统一回到第 1 行
+            if (recordCount < FirstRowNumber)
+            {
+                return FirstRowNumber;
+            }
+
+            // 总行数超过 int 上限时 startRow 本来就无法越过它
+            return startRow <= recordCount ? startRow : (int)Math.Min(recordCount, int.MaxValue);
+        }
+
         private static int DefaultRowCount => DefaultRowCountValue;
 
         private int currentMaxRowCount = DefaultRowCount;
@@ -149,6 +191,10 @@ namespace ParquetViewer
                     this.nextOffsetButton.Enabled = this._openParquetEngine is not null
                         && (long)this.CurrentOffset + this.CurrentMaxRowCount < this._openParquetEngine.RecordCount;
 
+                    // 已经不在第 1 行时才存在“上一个偏移量”可回到
+                    this.previousOffsetButton.Enabled = this._openParquetEngine is not null
+                        && this.CurrentOffset > 0;
+
                     SetSampleQueryAsPlaceHolder();
                 }
             }
@@ -164,7 +210,7 @@ namespace ParquetViewer
             this.ForeColor = System.Drawing.Color.Red;
             InitializeComponent();
             this.DefaultFormTitle = this.Text;
-            this.offsetTextBox.SetTextQuiet(DefaultOffset.ToString());
+            this.offsetTextBox.SetTextQuiet(FirstRowNumber.ToString());
             this.recordCountTextBox.SetTextQuiet(DefaultRowCount.ToString());
             this.MainDataSource = new DataTable();
             this.OpenFileOrFolderPath = null;
@@ -370,7 +416,11 @@ namespace ParquetViewer
                 var finalResult = await Task.Run(() => intermediateResult.Invoke(showIndexingProgress), loadingIcon.CancellationToken);
                 indexTime = stopwatch.Elapsed - loadTime;
 
-                this.recordCountStatusBarLabel.Text = string.Format(Resources.Strings.LoadedRecordCountRangeFormat, this.CurrentOffset, this.CurrentOffset + finalResult.Rows.Count);
+                // 状态栏按 1 起算显示本次加载覆盖的行号范围（含首尾两行）
+                this.recordCountStatusBarLabel.Text = string.Format(
+                    Resources.Strings.LoadedRecordCountRangeFormat,
+                    this.CurrentStartRow,
+                    this.CurrentOffset + finalResult.Rows.Count);
                 this.totalRowCountStatusBarLabel.Text = engine.RecordCount.ToString();
                 this.actualShownRecordCountLabel.Text = finalResult.Rows.Count.ToString();
 
