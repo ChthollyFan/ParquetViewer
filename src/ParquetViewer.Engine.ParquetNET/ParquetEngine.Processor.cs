@@ -1,4 +1,4 @@
-using Parquet;
+﻿using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
 using ParquetViewer.Engine.Exceptions;
@@ -152,7 +152,8 @@ namespace ParquetViewer.Engine.ParquetNET
         /// </remarks>
         private List<ReadSegment>? TryBuildParallelSegments(long offset, int recordCount)
         {
-            if (this._parquetFiles.Length != 1)
+            // 拼接文件的并行分片需要为每个分片打开多个片段 reader，暂不支持，统一走串行读取路径
+            if (this._parquetFiles.Length != 1 || this._segmentSource is not null)
             {
                 return null;
             }
@@ -883,7 +884,18 @@ namespace ParquetViewer.Engine.ParquetNET
             {
                 // Parquet.Net 6.x 用 ReadRawColumnDataBaseAsync 取代 ReadColumnAsync，返回泛型 RawColumnData<T>
                 var dataField = field.DataField ?? throw new MalformedFieldException($"Field `{field.PathWithParent}` has no data field");
-                var rawColumnData = await groupReader.ReadRawColumnDataBaseAsync(dataField, cancellationToken);
+                RawColumnData rawColumnData;
+                try
+                {
+                    rawColumnData = await groupReader.ReadRawColumnDataBaseAsync(dataField, cancellationToken);
+                }
+                catch (NotSupportedException) when (CanReadDateTimeColumnFromPhysicalValues(field, dataField))
+                {
+                    // Parquet.Net 6.1.0 的 DELTA_BINARY_PACKED 解码只支持整型，使用该编码的 DATE/TIMESTAMP 列会直接抛
+                    // NotSupportedException，导致整份文件无法查看。这里改为按物理类型重读原始整数并自行换算成日期时间值。
+                    return await ReadDateTimeColumnFromPhysicalValuesAsync(groupReader, field, dataField, slice, cancellationToken);
+                }
+
                 return await ConvertRawColumnDataView(groupReader, dataField, rawColumnData, field, slice, cancellationToken);
             }
             catch (OverflowException ex)
@@ -908,6 +920,199 @@ namespace ParquetViewer.Engine.ParquetNET
                 var maskedExMessage = ex.Message.Replace($"'{field.Path}'", $"`{field.Path}`");
                 throw new ParquetEngineException(maskedExMessage, ex);
             }
+        }
+
+        /// <summary>1 微秒对应的 .NET tick 数（1 tick = 100ns）</summary>
+        private const long TICKS_PER_MICROSECOND = TimeSpan.TicksPerMillisecond / 1000;
+
+        /// <summary>1 个 .NET tick 对应的纳秒数</summary>
+        private const long NANOSECONDS_PER_TICK = 100;
+
+        /// <summary>
+        /// 判断日期时间列是否可以通过"按物理类型读取 + 自行换算"的方式读取。
+        /// </summary>
+        /// <param name="field">列对应的字段，提供 thrift schema 信息</param>
+        /// <param name="dataField">库返回的字段定义，提供层级信息</param>
+        /// <returns>可以降级读取时返回 true</returns>
+        /// <remarks>
+        /// 仅限 DATE 与 TIMESTAMP 列：其它类型（例如同样使用 DELTA_BINARY_PACKED 的 TIME）
+        /// 即使抛出相同的异常也不做降级，避免用日期时间的换算规则错误解释其物理值。
+        /// 另外只处理行对齐的列（MaxRepetitionLevel 为 0）：重复列的值数量多于行数，
+        /// 降级路径无法从行数推算出需要分配的缓冲区大小。
+        /// </remarks>
+        private static bool CanReadDateTimeColumnFromPhysicalValues(ParquetSchemaElement field, DataField dataField)
+        {
+            if (dataField.MaxRepetitionLevel != 0 || !ParquetPhysicalDataField.IsSupported)
+            {
+                return false;
+            }
+
+            var schemaElement = field.SchemaElement;
+            if (schemaElement is null)
+            {
+                return false;
+            }
+
+            bool isDate = schemaElement.ConvertedType == Parquet.Meta.ConvertedType.DATE
+                || schemaElement.LogicalType?.DATE is not null;
+            bool isTimestamp = schemaElement.LogicalType?.TIMESTAMP is not null
+                || schemaElement.ConvertedType == Parquet.Meta.ConvertedType.TIMESTAMP_MILLIS
+                || schemaElement.ConvertedType == Parquet.Meta.ConvertedType.TIMESTAMP_MICROS;
+            return isDate || isTimestamp;
+        }
+
+        /// <summary>
+        /// 按物理整型读取日期时间列，再换算成引擎期望的 DateTime/DateOnly 值。
+        /// </summary>
+        /// <param name="groupReader">当前行组读取器</param>
+        /// <param name="field">列对应的字段</param>
+        /// <param name="dataField">库返回的字段定义，提供可空层级信息</param>
+        /// <param name="slice">需要返回的行区间；null 表示返回整个 row group</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>列数据视图</returns>
+        /// <remarks>用于绕过 Parquet.Net 6.1.0 的 DELTA_BINARY_PACKED 只支持整型的限制。</remarks>
+        private static async Task<RawColumnDataView> ReadDateTimeColumnFromPhysicalValuesAsync(ParquetRowGroupReader groupReader,
+            ParquetSchemaElement field, DataField dataField, RowSlice? slice, CancellationToken cancellationToken)
+        {
+            var schemaElement = field.SchemaElement
+                ?? throw new MalformedFieldException($"Field `{field.PathWithParent}` has no thrift schema element");
+
+            if (schemaElement.Type == Parquet.Meta.Type.INT32)
+            {
+                return await ReadDateColumnFromPhysicalValuesAsync<int>(groupReader, dataField, schemaElement, slice, cancellationToken);
+            }
+
+            if (schemaElement.Type == Parquet.Meta.Type.INT64)
+            {
+                return await ReadDateColumnFromPhysicalValuesAsync<long>(groupReader, dataField, schemaElement, slice, cancellationToken);
+            }
+
+            throw new ParquetEngineException($"Field `{field.PathWithParent}` has unexpected physical type {schemaElement.Type} for a date/time column");
+        }
+
+        /// <summary>
+        /// 读取行对齐的日期时间列的物理值并逐行换算。
+        /// </summary>
+        /// <typeparam name="TPhysical">物理类型：int 对应 INT32，long 对应 INT64</typeparam>
+        /// <param name="groupReader">当前行组读取器</param>
+        /// <param name="dataField">原字段定义</param>
+        /// <param name="schemaElement">thrift schema 元素，提供逻辑类型与时间精度</param>
+        /// <param name="slice">需要返回的行区间；null 表示返回整个 row group</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>列数据视图</returns>
+        private static async Task<RawColumnDataView> ReadDateColumnFromPhysicalValuesAsync<TPhysical>(ParquetRowGroupReader groupReader,
+            DataField dataField, Parquet.Meta.SchemaElement schemaElement, RowSlice? slice, CancellationToken cancellationToken)
+            where TPhysical : struct
+        {
+            // MaxRepetitionLevel 为 0 的列每个位置对应一行，因此行数就是需要读取的位置数量
+            int positionCount = checked((int)groupReader.RowCount);
+            TPhysical[] values = new TPhysical[positionCount];
+
+            // 库可能额外写入行标记，放大层级缓冲区避免越界（与 ConvertRawColumnDataViewGeneric 的处理保持一致）
+            int levelsBufferSize = positionCount + (int)Math.Min(groupReader.RowCount, int.MaxValue);
+            int[] definitionLevels = new int[levelsBufferSize];
+            int[] repetitionLevels = new int[levelsBufferSize];
+
+            DataField physicalField = ParquetPhysicalDataField.Create<TPhysical>(dataField);
+            await groupReader.ReadRawAsync(physicalField, values.AsMemory(), definitionLevels.AsMemory(), repetitionLevels.AsMemory(), cancellationToken);
+
+            int maxDefinitionLevel = dataField.MaxDefinitionLevel;
+            bool hasNulls = false;
+            for (int i = 0; i < positionCount; i++)
+            {
+                if (definitionLevels[i] < maxDefinitionLevel)
+                {
+                    hasNulls = true;
+                    break;
+                }
+            }
+
+            // 行区间裁剪：只换算真正要返回的行
+            int rangeStart = 0;
+            int rangeEnd = positionCount;
+            if (slice is not null)
+            {
+                rangeStart = (int)Math.Clamp(slice.Value.SkipRecords, 0, positionCount);
+                rangeEnd = (int)Math.Clamp(slice.Value.SkipRecords + slice.Value.ReadRecords, rangeStart, positionCount);
+            }
+
+            object?[] data = new object?[rangeEnd - rangeStart];
+            if (!hasNulls)
+            {
+                for (int i = rangeStart; i < rangeEnd; i++)
+                {
+                    data[i - rangeStart] = ConvertPhysicalDateTimeValue(System.Convert.ToInt64(values[i]), schemaElement);
+                }
+            }
+            else
+            {
+                // 物理值流只含有值位置的值，先数出区间之前有多少个有效值作为下标起点
+                int valueIndex = 0;
+                for (int i = 0; i < rangeStart; i++)
+                {
+                    if (definitionLevels[i] == maxDefinitionLevel)
+                    {
+                        valueIndex++;
+                    }
+                }
+
+                for (int i = rangeStart; i < rangeEnd; i++)
+                {
+                    if (definitionLevels[i] == maxDefinitionLevel)
+                    {
+                        data[i - rangeStart] = ConvertPhysicalDateTimeValue(System.Convert.ToInt64(values[valueIndex++]), schemaElement);
+                    }
+                    else
+                    {
+                        data[i - rangeStart] = DBNull.Value;
+                    }
+                }
+            }
+
+            return new RawColumnDataView
+            {
+                Data = data,
+                DefinitionLevels = SliceLevels(definitionLevels, rangeStart, rangeEnd),
+                RepetitionLevels = null, // 行对齐的列没有 repetition levels
+            };
+        }
+
+        /// <summary>
+        /// 把日期时间列的物理整数值换算成引擎展示用的日期时间值。
+        /// </summary>
+        /// <param name="rawValue">物理整数值：DATE 为天数，TIMESTAMP 为毫秒/微秒/纳秒</param>
+        /// <param name="schemaElement">thrift schema 元素，提供逻辑类型与时间精度</param>
+        /// <returns>DATE 返回 DateOnly，TIMESTAMP 返回 DateTime</returns>
+        /// <remarks>
+        /// 换算规则与 Parquet.Net 保持一致：isAdjustedToUTC 为 true 时标记为 Utc，否则标记为 Local（库的既有行为），
+        /// 纳秒精度按 100ns 截断到 .NET tick。
+        /// </remarks>
+        private static object ConvertPhysicalDateTimeValue(long rawValue, Parquet.Meta.SchemaElement schemaElement)
+        {
+            if (schemaElement.ConvertedType == Parquet.Meta.ConvertedType.DATE || schemaElement.LogicalType?.DATE is not null)
+            {
+                // 引擎启用 UseDateOnlyTypeForDates，DATE 列统一以 DateOnly 展示
+                return DateOnly.FromDateTime(DateTime.UnixEpoch.AddDays(rawValue));
+            }
+
+            bool adjustedToUtc = true;
+            long ticksPerUnit = TICKS_PER_MICROSECOND; // 未标注精度的 TIMESTAMP 按最常见的微秒处理
+            var timestampType = schemaElement.LogicalType?.TIMESTAMP;
+            if (timestampType is not null)
+            {
+                adjustedToUtc = timestampType.IsAdjustedToUTC;
+                ticksPerUnit = timestampType.Unit.MILLIS is not null
+                    ? TimeSpan.TicksPerMillisecond
+                    : timestampType.Unit.MICROS is not null ? TICKS_PER_MICROSECOND : 1;
+            }
+            else if (schemaElement.ConvertedType == Parquet.Meta.ConvertedType.TIMESTAMP_MILLIS)
+            {
+                ticksPerUnit = TimeSpan.TicksPerMillisecond;
+            }
+
+            long ticks = ticksPerUnit == 1 ? rawValue / NANOSECONDS_PER_TICK : rawValue * ticksPerUnit;
+            DateTime value = DateTime.UnixEpoch.AddTicks(ticks);
+            return DateTime.SpecifyKind(value, adjustedToUtc ? DateTimeKind.Utc : DateTimeKind.Local);
         }
 
         /// <summary>
@@ -1116,4 +1321,3 @@ namespace ParquetViewer.Engine.ParquetNET
         }
     }
 }
-
