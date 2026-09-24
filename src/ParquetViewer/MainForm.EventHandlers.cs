@@ -1,4 +1,5 @@
-﻿using ParquetViewer.Engine;
+﻿using ParquetViewer.Controls;
+using ParquetViewer.Engine;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Exceptions;
 using ParquetViewer.Helpers;
@@ -38,11 +39,25 @@ namespace ParquetViewer
 
         private void offsetTextBox_TextChanged(object sender, EventArgs? e)
         {
-            var textbox = (TextBox)sender;
-            if (int.TryParse(textbox.Text, out var offset))
-                this.CurrentOffset = offset;
-            else
-                textbox.Text = this.CurrentOffset.ToString();
+            var textbox = (DelayedOnChangedTextBox)sender;
+
+            // 文本框按 1 起算显示起始行号，输入无法解析时还原成当前生效的行号
+            if (!int.TryParse(textbox.Text, out int startRow))
+            {
+                textbox.SetTextQuiet(this.CurrentStartRow.ToString());
+                return;
+            }
+
+            // 越界值钳制回文件真实范围内：打开文件后最小为第 1 行、最大为最后一行。
+            // 回写必须用 SetTextQuiet，直接赋 Text 会重启延迟计时器并再触发一次加载
+            int clampedStartRow = this.ClampStartRow(startRow);
+            if (clampedStartRow != startRow)
+            {
+                textbox.SetTextQuiet(clampedStartRow.ToString());
+            }
+
+            // 界面行号减 1 才是引擎需要的 0 起算偏移
+            this.CurrentOffset = clampedStartRow - 1;
         }
 
         private void recordsToTextBox_TextChanged(object sender, EventArgs? e)
@@ -215,7 +230,8 @@ namespace ParquetViewer
             }
 
             //Force file reload to happen instantly by triggering the event handler ourselves
-            this.offsetTextBox.SetTextQuiet(((int)nextOffset).ToString());
+            // 文本框按 1 起算显示行号，写入前把 0 起算偏移换算回行号
+            this.offsetTextBox.SetTextQuiet(((int)nextOffset + FirstRowNumber).ToString());
             this.offsetTextBox_TextChanged(this.offsetTextBox, null);
         }
 
@@ -229,6 +245,37 @@ namespace ParquetViewer
                 nextOffsetRecordsButton.Image = nextOffsetRecordsButton.Enabled
                     ? Resources.Icons.next_blue
                     : Resources.Icons.next_disabled;
+            }
+        }
+
+        private void previousOffsetButton_Click(object? sender, EventArgs? e)
+        {
+            if (this._openParquetEngine is null)
+            {
+                return;
+            }
+
+            // 按当前页大小向前翻一页，越过文件开头时停在第一行；先转成 long 再相减，避免偏移量为负时溢出
+            long previousOffset = (long)this.CurrentOffset - this.CurrentMaxRowCount;
+            if (previousOffset < 0)
+            {
+                previousOffset = 0;
+            }
+
+            //Force file reload to happen instantly by triggering the event handler ourselves
+            // 文本框按 1 起算显示行号，写入前把 0 起算偏移换算回行号
+            this.offsetTextBox.SetTextQuiet(((int)previousOffset + FirstRowNumber).ToString());
+            this.offsetTextBox_TextChanged(this.offsetTextBox, null);
+        }
+
+        private void previousOffsetButton_EnabledChanged(object sender, EventArgs e)
+        {
+            if (sender is Button previousOffsetRecordsButton)
+            {
+                previousOffsetRecordsButton.FlatAppearance.MouseOverBackColor = Color.Transparent;
+                previousOffsetRecordsButton.FlatAppearance.MouseDownBackColor = Color.Transparent;
+
+                previousOffsetRecordsButton.Image = GetPreviousPageIcon(previousOffsetRecordsButton.Enabled);
             }
         }
 

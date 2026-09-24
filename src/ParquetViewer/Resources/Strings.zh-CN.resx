@@ -124,7 +124,7 @@
     <value>大文件提示</value>
   </data>
   <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
-    <value>{0} 到 {1}</value>
+    <value>第 {0} 到 {1} 行</value>
   </data>
   <data name="LoadingDataLabelText" xml:space="preserve">
     <value>正在加载数据</value>

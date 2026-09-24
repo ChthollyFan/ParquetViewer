@@ -48,6 +48,7 @@ namespace ParquetViewer
             mainGridView = new ParquetGridView();
             loadAllRowsButton = new Button();
             nextOffsetButton = new Button();
+            previousOffsetButton = new Button();
             openParquetFileDialog = new OpenFileDialog();
             mainMenuStrip = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
@@ -107,8 +108,9 @@ namespace ParquetViewer
             mainTableLayoutPanel.Controls.Add(searchFilterTextBox, 2, 0);
             mainTableLayoutPanel.Controls.Add(clearFilterButton, 5, 0);
             mainTableLayoutPanel.Controls.Add(mainGridView, 0, 1);
-            mainTableLayoutPanel.Controls.Add(loadAllRowsButton, 10, 0);
+            mainTableLayoutPanel.Controls.Add(previousOffsetButton, 10, 0);
             mainTableLayoutPanel.Controls.Add(nextOffsetButton, 11, 0);
+            mainTableLayoutPanel.Controls.Add(loadAllRowsButton, 12, 0);
             mainTableLayoutPanel.Name = "mainTableLayoutPanel";
             // 
             // recordsToLabel
@@ -190,7 +192,7 @@ namespace ParquetViewer
             mainGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
             mainGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             mainGridView.ColumnNameEscapeFormat = "[{0}]";
-            mainTableLayoutPanel.SetColumnSpan(mainGridView, 12);
+            mainTableLayoutPanel.SetColumnSpan(mainGridView, 13);
             mainGridView.CopyAsWhereIcon = (System.Drawing.Image)resources.GetObject("mainGridView.CopyAsWhereIcon");
             mainGridView.CopyToClipboardIcon = (System.Drawing.Image)resources.GetObject("mainGridView.CopyToClipboardIcon");
             mainGridView.DateValueEscapeFormat = "#{0}#";
@@ -202,6 +204,23 @@ namespace ParquetViewer
             mainGridView.ShowCopyAsWhereContextMenuItem = true;
             mainGridView.DataBindingComplete += mainGridView_DataBindingComplete;
             // 
+            // previousOffsetButton
+            // 
+            resources.ApplyResources(previousOffsetButton, "previousOffsetButton");
+            previousOffsetButton.Cursor = Cursors.Hand;
+            previousOffsetButton.FlatAppearance.BorderSize = 0;
+            previousOffsetButton.FlatAppearance.MouseOverBackColor = System.Drawing.SystemColors.Control;
+            // 左箭头由“下一页”的箭头图标水平镜像得到，避免只靠文字区分方向；
+            // 初始与“下一页”一致使用蓝色图标，禁用态由 EnabledChanged 统一处理
+            previousOffsetButton.Image = GetPreviousPageIcon(true);
+            previousOffsetButton.TextImageRelation = TextImageRelation.ImageBeforeText;
+            previousOffsetButton.AutoEllipsis = true;
+            previousOffsetButton.Name = "previousOffsetButton";
+            loadAllRowsButtonTooltip.SetToolTip(previousOffsetButton, resources.GetString("previousOffsetButton.ToolTip"));
+            previousOffsetButton.UseVisualStyleBackColor = true;
+            previousOffsetButton.EnabledChanged += previousOffsetButton_EnabledChanged;
+            previousOffsetButton.Click += previousOffsetButton_Click;
+            // 
             // loadAllRowsButton
             // 
             resources.ApplyResources(loadAllRowsButton, "loadAllRowsButton");
@@ -209,6 +228,9 @@ namespace ParquetViewer
             loadAllRowsButton.FlatAppearance.BorderSize = 0;
             loadAllRowsButton.FlatAppearance.MouseOverBackColor = System.Drawing.SystemColors.Control;
             loadAllRowsButton.Image = Resources.Icons.next_blue;
+            // 图标旁补上文字标注，避免用户只看到箭头猜不出功能
+            loadAllRowsButton.TextImageRelation = TextImageRelation.ImageBeforeText;
+            loadAllRowsButton.AutoEllipsis = true;
             loadAllRowsButton.Name = "loadAllRowsButton";
             loadAllRowsButtonTooltip.SetToolTip(loadAllRowsButton, resources.GetString("loadAllRowsButton.ToolTip"));
             loadAllRowsButton.UseVisualStyleBackColor = true;
@@ -222,6 +244,9 @@ namespace ParquetViewer
             nextOffsetButton.FlatAppearance.BorderSize = 0;
             nextOffsetButton.FlatAppearance.MouseOverBackColor = System.Drawing.SystemColors.Control;
             nextOffsetButton.Image = Resources.Icons.next_blue;
+            // 图标旁补上文字标注，避免用户只看到箭头猜不出功能
+            nextOffsetButton.TextImageRelation = TextImageRelation.ImageBeforeText;
+            nextOffsetButton.AutoEllipsis = true;
             nextOffsetButton.Name = "nextOffsetButton";
             loadAllRowsButtonTooltip.SetToolTip(nextOffsetButton, resources.GetString("nextOffsetButton.ToolTip"));
             nextOffsetButton.UseVisualStyleBackColor = true;
@@ -545,6 +570,7 @@ namespace ParquetViewer
         private System.Windows.Forms.ToolStripMenuItem openFolderToolStripMenuItem;
         private System.Windows.Forms.Button loadAllRowsButton;
         private System.Windows.Forms.Button nextOffsetButton;
+        private System.Windows.Forms.Button previousOffsetButton;
         private ToolTip loadAllRowsButtonTooltip;
         private ToolStripMenuItem customDateFormatToolStripMenuItem;
         private ToolStripMenuItem darkModeToolStripMenuItem;

@@ -119,7 +119,7 @@
   </resheader>
   <assembly alias="mscorlib" name="mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
   <data name="mainTableLayoutPanel.ColumnCount" type="System.Int32, mscorlib">
-    <value>12</value>
+    <value>13</value>
   </data>
   <assembly alias="System.Windows.Forms" name="System.Windows.Forms, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
   <data name="recordsToLabel.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
@@ -140,7 +140,7 @@
     <value>3</value>
   </data>
   <data name="recordsToLabel.Text" xml:space="preserve">
-    <value>Record Count:</value>
+    <value>Show rows:</value>
   </data>
   <data name="recordsToLabel.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>MiddleRight</value>
@@ -203,7 +203,7 @@
     <value>1</value>
   </data>
   <data name="showRecordsFromLabel.Text" xml:space="preserve">
-    <value>Record Offset:</value>
+    <value>Start row:</value>
   </data>
   <data name="showRecordsFromLabel.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>MiddleRight</value>
@@ -377,7 +377,7 @@
     <value>579, 3</value>
   </data>
   <data name="clearFilterButton.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
-    <value>4, 3, 4, 3</value>
+    <value>4, 3, 0, 3</value>
   </data>
   <data name="clearFilterButton.Size" type="System.Drawing.Size, System.Drawing">
     <value>85, 29</value>
@@ -489,7 +489,7 @@
     <value>2, 0, 5, 0</value>
   </data>
   <data name="loadAllRowsButton.Size" type="System.Drawing.Size, System.Drawing">
-    <value>13, 16</value>
+    <value>13, 23</value>
   </data>
   <data name="loadAllRowsButton.TabIndex" type="System.Int32, mscorlib">
     <value>6</value>
@@ -497,6 +497,9 @@
   <metadata name="loadAllRowsButtonTooltip.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
     <value>17, 17</value>
   </metadata>
+  <data name="loadAllRowsButton.Text" xml:space="preserve">
+    <value>Load all</value>
+  </data>
   <data name="loadAllRowsButton.ToolTip" xml:space="preserve">
     <value>Load all records (Ctrl+E)</value>
   </data>
@@ -534,13 +537,61 @@
     <value>2, 0, 5, 0</value>
   </data>
   <data name="nextOffsetButton.Size" type="System.Drawing.Size, System.Drawing">
-    <value>13, 16</value>
+    <value>13, 23</value>
   </data>
   <data name="nextOffsetButton.TabIndex" type="System.Int32, mscorlib">
     <value>9</value>
   </data>
+  <data name="nextOffsetButton.Text" xml:space="preserve">
+    <value>Next page</value>
+  </data>
   <data name="nextOffsetButton.ToolTip" xml:space="preserve">
-    <value>Jump to the next offset</value>
+    <value>Load the next page of rows</value>
+  </data>
+  <data name="previousOffsetButton.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Left, Right</value>
+  </data>
+  <data name="previousOffsetButton.BackgroundImageLayout" type="System.Windows.Forms.ImageLayout, System.Windows.Forms">
+    <value>Center</value>
+  </data>
+  <data name="previousOffsetButton.Enabled" type="System.Boolean, mscorlib">
+    <value>False</value>
+  </data>
+  <data name="previousOffsetButton.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="previousOffsetButton.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Segoe UI, 8.25pt</value>
+  </data>
+  <data name="previousOffsetButton.Location" type="System.Drawing.Point, System.Drawing">
+    <value>1040, 9</value>
+  </data>
+  <data name="previousOffsetButton.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>2, 0, 5, 0</value>
+  </data>
+  <data name="previousOffsetButton.Size" type="System.Drawing.Size, System.Drawing">
+    <value>73, 23</value>
+  </data>
+  <data name="previousOffsetButton.TabIndex" type="System.Int32, mscorlib">
+    <value>10</value>
+  </data>
+  <data name="previousOffsetButton.Text" xml:space="preserve">
+    <value>Previous</value>
+  </data>
+  <data name="previousOffsetButton.ToolTip" xml:space="preserve">
+    <value>Load the previous page of rows</value>
+  </data>
+  <data name="&gt;&gt;previousOffsetButton.Name" xml:space="preserve">
+    <value>previousOffsetButton</value>
+  </data>
+  <data name="&gt;&gt;previousOffsetButton.Type" xml:space="preserve">
+    <value>System.Windows.Forms.Button, System.Windows.Forms, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="&gt;&gt;previousOffsetButton.Parent" xml:space="preserve">
+    <value>mainTableLayoutPanel</value>
+  </data>
+  <data name="&gt;&gt;previousOffsetButton.ZOrder" xml:space="preserve">
+    <value>10</value>
   </data>
   <data name="&gt;&gt;nextOffsetButton.Name" xml:space="preserve">
     <value>nextOffsetButton</value>
@@ -567,7 +618,7 @@
     <value>4</value>
   </data>
   <data name="mainTableLayoutPanel.Size" type="System.Drawing.Size, System.Drawing">
-    <value>944, 420</value>
+    <value>1120, 420</value>
   </data>
   <data name="mainTableLayoutPanel.TabIndex" type="System.Int32, mscorlib">
     <value>0</value>
@@ -585,7 +636,7 @@
     <value>1</value>
   </data>
   <data name="mainTableLayoutPanel.LayoutSettings" type="System.Windows.Forms.TableLayoutSettings, System.Windows.Forms">
-    <value>&lt;?xml version="1.0" encoding="utf-16"?&gt;&lt;TableLayoutSettings&gt;&lt;Controls&gt;&lt;Control Name="recordsToLabel" Row="0" RowSpan="1" Column="8" ColumnSpan="1" /&gt;&lt;Control Name="recordCountTextBox" Row="0" RowSpan="1" Column="9" ColumnSpan="1" /&gt;&lt;Control Name="showRecordsFromLabel" Row="0" RowSpan="1" Column="6" ColumnSpan="1" /&gt;&lt;Control Name="offsetTextBox" Row="0" RowSpan="1" Column="7" ColumnSpan="1" /&gt;&lt;Control Name="runQueryButton" Row="0" RowSpan="1" Column="4" ColumnSpan="1" /&gt;&lt;Control Name="searchFilterLabel" Row="0" RowSpan="1" Column="0" ColumnSpan="2" /&gt;&lt;Control Name="searchFilterTextBox" Row="0" RowSpan="1" Column="2" ColumnSpan="2" /&gt;&lt;Control Name="clearFilterButton" Row="0" RowSpan="1" Column="5" ColumnSpan="1" /&gt;&lt;Control Name="mainGridView" Row="1" RowSpan="2" Column="0" ColumnSpan="12" /&gt;&lt;Control Name="loadAllRowsButton" Row="0" RowSpan="1" Column="10" ColumnSpan="1" /&gt;&lt;Control Name="nextOffsetButton" Row="0" RowSpan="1" Column="11" ColumnSpan="1" /&gt;&lt;/Controls&gt;&lt;Columns Styles="Absolute,74,Absolute,35,Absolute,93,Percent,100,Absolute,117,Absolute,93,Absolute,58,Absolute,70,Absolute,58,Absolute,70,Absolute,20,Absolute,20" /&gt;&lt;Rows Styles="Absolute,35,Absolute,35,Percent,100,Absolute,23" /&gt;&lt;/TableLayoutSettings&gt;</value>
+    <value>&lt;?xml version="1.0" encoding="utf-16"?&gt;&lt;TableLayoutSettings&gt;&lt;Controls&gt;&lt;Control Name="recordsToLabel" Row="0" RowSpan="1" Column="8" ColumnSpan="1" /&gt;&lt;Control Name="recordCountTextBox" Row="0" RowSpan="1" Column="9" ColumnSpan="1" /&gt;&lt;Control Name="showRecordsFromLabel" Row="0" RowSpan="1" Column="6" ColumnSpan="1" /&gt;&lt;Control Name="offsetTextBox" Row="0" RowSpan="1" Column="7" ColumnSpan="1" /&gt;&lt;Control Name="runQueryButton" Row="0" RowSpan="1" Column="4" ColumnSpan="1" /&gt;&lt;Control Name="searchFilterLabel" Row="0" RowSpan="1" Column="0" ColumnSpan="2" /&gt;&lt;Control Name="searchFilterTextBox" Row="0" RowSpan="1" Column="2" ColumnSpan="2" /&gt;&lt;Control Name="clearFilterButton" Row="0" RowSpan="1" Column="5" ColumnSpan="1" /&gt;&lt;Control Name="mainGridView" Row="1" RowSpan="2" Column="0" ColumnSpan="13" /&gt;&lt;Control Name="previousOffsetButton" Row="0" RowSpan="1" Column="10" ColumnSpan="1" /&gt;&lt;Control Name="loadAllRowsButton" Row="0" RowSpan="1" Column="12" ColumnSpan="1" /&gt;&lt;Control Name="nextOffsetButton" Row="0" RowSpan="1" Column="11" ColumnSpan="1" /&gt;&lt;/Controls&gt;&lt;Columns Styles="Absolute,74,Absolute,35,Absolute,93,Percent,100,Absolute,90,Absolute,90,Absolute,68,Absolute,70,Absolute,68,Absolute,70,Absolute,92,Absolute,101,Absolute,114" /&gt;&lt;Rows Styles="Absolute,35,Absolute,35,Percent,100,Absolute,23" /&gt;&lt;/TableLayoutSettings&gt;</value>
   </data>
   <metadata name="openParquetFileDialog.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
     <value>208, 17</value>
@@ -1024,7 +1075,7 @@
     <value>7, 15</value>
   </data>
   <data name="$this.ClientSize" type="System.Drawing.Size, System.Drawing">
-    <value>944, 444</value>
+    <value>1120, 444</value>
   </data>
   <data name="$this.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
     <value>4, 3, 4, 3</value>

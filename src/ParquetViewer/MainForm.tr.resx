@@ -118,7 +118,7 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="recordsToLabel.Text" xml:space="preserve">
-    <value>Kayıt Sayısı:</value>
+    <value>Kaç satır:</value>
   </data>
   <data name="recordsToLabel.ToolTip" xml:space="preserve">
     <value />
@@ -127,7 +127,7 @@
     <value />
   </data>
   <data name="showRecordsFromLabel.Text" xml:space="preserve">
-    <value>Kayıt Atla:</value>
+    <value>İlk satır:</value>
   </data>
   <data name="showRecordsFromLabel.ToolTip" xml:space="preserve">
     <value />
@@ -206,11 +206,23 @@
   <data name="mainGridView.ToolTip" xml:space="preserve">
     <value />
   </data>
+  <data name="loadAllRowsButton.Text" xml:space="preserve">
+    <value>Tümü</value>
+  </data>
   <data name="loadAllRowsButton.ToolTip" xml:space="preserve">
     <value>Tüm kayıtları yükle (Ctrl+E)</value>
   </data>
+  <data name="nextOffsetButton.Text" xml:space="preserve">
+    <value>Sonraki</value>
+  </data>
   <data name="nextOffsetButton.ToolTip" xml:space="preserve">
-    <value>Sonraki ofsete atla (geçerli kayıt sayısı kadar ileri gider)</value>
+    <value>Sonraki sayfayı yükle (gösterilen satır sayısı kadar ilerler)</value>
+  </data>
+  <data name="previousOffsetButton.Text" xml:space="preserve">
+    <value>Önceki</value>
+  </data>
+  <data name="previousOffsetButton.ToolTip" xml:space="preserve">
+    <value>Önceki sayfayı yükle (gösterilen satır sayısı kadar geriler)</value>
   </data>
   <data name="mainTableLayoutPanel.ToolTip" xml:space="preserve">
     <value />
