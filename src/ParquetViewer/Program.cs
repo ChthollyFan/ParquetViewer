@@ -1,5 +1,4 @@
-﻿using ParquetViewer.Analytics;
-using ParquetViewer.Helpers;
+﻿using ParquetViewer.Helpers;
 using System;
 using System.Globalization;
 using System.IO;
@@ -34,6 +33,9 @@ namespace ParquetViewer
             string? pathToOpen = GetPathToOpen(args);
             var mainForm = new MainForm(pathToOpen); //Form must be created after calling SetCompatibleTextRenderingDefault();
             AppSettings.DarkMode = AppSettings.DarkMode; // Trigger Theming
+
+            //本仓库不再收集使用数据，启动时清理旧版本可能遗留的遥测注册表项
+            AppSettings.RemoveLegacyAnalyticsSettings();
 
             RouteUnhandledExceptions();
 
@@ -104,49 +106,9 @@ namespace ParquetViewer
 
         private static void ExceptionHandler(Exception ex)
         {
-            ExceptionEvent.FireAndForget(ex);
+            //本仓库已移除匿名遥测，未处理异常只在本机提示用户，不再向外上报
             MessageBox.Show($"{Resources.Errors.GenericErrorMessage} {Resources.Errors.CopyErrorMessageText}:{Environment.NewLine}{Environment.NewLine}{ex}",
                 ex.Message, MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-
-        /// <summary>
-        /// We only ask for consent if the user launched the app at least twice, 1 day apart.
-        /// </summary>
-        /// <remarks>
-        /// TODO: Should we postpone asking analytics consent if this is also if we're also asking for .parquet file association?
-        ///   It would be annoying if we ask to become the user's default parquet viewer then also ask if we can gather
-        ///   analytics back-to-back. But chances of that happening are slim so maybe we don't need to worry about it?
-        /// </remarks>
-        public static void GetUserConsentToGatherAnalytics()
-        {
-            if (AppSettings.ConsentLastAskedOnVersion is null || AppSettings.ConsentLastAskedOnVersion < Env.AssemblyVersion)
-            {
-                if (AppSettings.AnalyticsDataGatheringConsent)
-                {
-                    //Keep user's consent asked version up to date with the current assembly version
-                    AppSettings.ConsentLastAskedOnVersion = Env.AssemblyVersion;
-                    return;
-                }
-
-                bool isFirstLaunch = AppSettings.ConsentLastAskedOnVersion is null;
-                if (isFirstLaunch)
-                {
-                    //Don't ask for consent on the first launch. Record the day of the month instead so we can ask tomorrow. 
-                    AppSettings.ConsentLastAskedOnVersion = new SemanticVersion(0, 0, 0, DateTime.Now.Day);
-                }
-                else if (AppSettings.ConsentLastAskedOnVersion != new SemanticVersion(0, 0, 0, DateTime.Now.Day))
-                {
-                    AppSettings.ConsentLastAskedOnVersion = Env.AssemblyVersion;
-                    if (MessageBox.Show(
-                        Resources.Strings.AnalyticsConsentPromptMessage,
-                        Resources.Strings.AnalyticsConsentPromptTitle,
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    {
-                        //We got consent! Start gathering some data..
-                        AppSettings.AnalyticsDataGatheringConsent = true;
-                    }
-                }
-            }
         }
 
         /// <summary>

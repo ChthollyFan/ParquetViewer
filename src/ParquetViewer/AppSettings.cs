@@ -40,33 +40,26 @@ namespace ParquetViewer
             set => SetRegistryValue(AlwaysLoadAllRecordsKey, value.ToString());
         }
 
-        public static SemanticVersion? ConsentLastAskedOnVersion
-        {
-            get => ReadRegistryValue(ConsentLastAskedOnVersionKey, out string? value) ? SemanticVersion.TryParse(value, out var semanticVersion) ? semanticVersion : null : null;
-            set => SetRegistryValue(ConsentLastAskedOnVersionKey, value?.ToString() ?? string.Empty);
-        }
-
-        public static Guid AnalyticsDeviceId
-            => ReadRegistryValue(AnalyticsDeviceIdKey, out string? temp) && Guid.TryParse(temp, out var value) ? value : SetAnalyticsDeviceId();
-
-        private static Guid SetAnalyticsDeviceId()
+        /// <summary>
+        /// 清理旧版本遗留的遥测设置项。本仓库不再收集任何使用数据，启动时删除一次即可；
+        /// 键值不存在时删除是无操作，因此不需要额外的一次性标记。
+        /// </summary>
+        public static void RemoveLegacyAnalyticsSettings()
         {
             try
             {
-                Guid newDeviceId = Guid.NewGuid();
-                SetRegistryValue(AnalyticsDeviceIdKey, newDeviceId);
-                return newDeviceId;
+                using var registryKey = Registry.CurrentUser.CreateSubKey(RegistrySubKey);
+                if (registryKey is null)
+                    return;
+
+                registryKey.DeleteValue(ConsentLastAskedOnVersionKey, throwOnMissingValue: false);
+                registryKey.DeleteValue(AnalyticsDeviceIdKey, throwOnMissingValue: false);
+                registryKey.DeleteValue(AnalyticsDataGatheringConsentKey, throwOnMissingValue: false);
             }
             catch
             {
-                return Guid.Empty;
+                //清理失败不影响程序运行，直接忽略
             }
-        }
-
-        public static bool AnalyticsDataGatheringConsent
-        {
-            get => ReadRegistryValue(AnalyticsDataGatheringConsentKey, out string? temp) && bool.TryParse(temp, out var value) ? value : false;
-            set => SetRegistryValue(AnalyticsDataGatheringConsentKey, value.ToString());
         }
 
         private static int? _openedFileCount;

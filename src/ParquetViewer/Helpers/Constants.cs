@@ -1,5 +1,4 @@
 ﻿using Microsoft.Win32;
-using ParquetViewer.Analytics;
 using ParquetViewer.Exceptions;
 using System;
 using System.Net.Http;
@@ -39,7 +38,8 @@ namespace ParquetViewer.Helpers
             var assemblyVersionString = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? string.Empty;
 
             if (!SemanticVersion.TryParse(assemblyVersionString, out var assemblyVersion))
-                UnsupportedAssemblyVersionException.Record(assemblyVersionString);
+                //遥测移除后不再"记录后继续"：版本号解析失败直接抛出，交由顶层异常处理器提示
+                throw new UnsupportedAssemblyVersionException(assemblyVersionString);
 
             return assemblyVersion;
         }
@@ -97,9 +97,9 @@ namespace ParquetViewer.Helpers
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                ExceptionEvent.FireAndForget(ex);
+                //遥测移除后不再上报查询失败，静默降级为“获取不到最新版本”
             }
 
             return (null, null);

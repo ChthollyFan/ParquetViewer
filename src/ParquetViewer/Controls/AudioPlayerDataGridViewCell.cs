@@ -1,7 +1,6 @@
 ﻿
 using NAudio.FileFormats.Wav;
 using NAudio.Wave;
-using ParquetViewer.Analytics;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Helpers;
 using System;
@@ -308,7 +307,6 @@ namespace ParquetViewer.Controls
             }
         }
 
-        private bool _sentQuickPeekEvent = false;
         private void TogglePlayPause()
         {
             if (this._audioPlayer is null || this._audioStream is null)
@@ -325,13 +323,6 @@ namespace ParquetViewer.Controls
                 this._audioPlayer.Play();
                 this._isPlaying = true;
                 this._updateTimer.Start();
-
-                // Lets throttle events just in case. Not sure if it's necessary
-                if (!this._sentQuickPeekEvent)
-                {
-                    QuickPeekEvent.FireAndForget(QuickPeekEvent.DataTypeId.Audio);
-                    this._sentQuickPeekEvent = true;
-                }
             }
 
             this.RedrawCell();

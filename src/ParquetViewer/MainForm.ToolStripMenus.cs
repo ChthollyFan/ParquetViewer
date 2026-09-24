@@ -1,11 +1,9 @@
-﻿using ParquetViewer.Analytics;
-using ParquetViewer.Helpers;
+﻿using ParquetViewer.Helpers;
 using System;
 using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace ParquetViewer
@@ -18,7 +16,6 @@ namespace ParquetViewer
 
         private void newToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.FileNew);
             this.OpenFileOrFolderPath = null;
         }
 
@@ -28,7 +25,6 @@ namespace ParquetViewer
             {
                 if (this.openParquetFileDialog.ShowDialog(this) == DialogResult.OK)
                 {
-                    MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.FileOpen);
                     await this.OpenNewFileOrFolder(this.openParquetFileDialog.FileName);
                 }
             }
@@ -45,7 +41,6 @@ namespace ParquetViewer
             {
                 if (this.openFolderDialog.ShowDialog(this) == DialogResult.OK)
                 {
-                    MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.FolderOpen);
                     await this.OpenNewFileOrFolder(this.openFolderDialog.SelectedPath);
                 }
             }
@@ -58,16 +53,13 @@ namespace ParquetViewer
 
         private void saveAsToolStripMenuItem_Click(object sender, EventArgs e) => this.ExportResults(default);
 
-        private async void exitToolStripMenuItem_Click(object sender, EventArgs e)
+        private void exitToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var exitEventTask = new MenuBarClickEvent { Action = MenuBarClickEvent.ActionId.Exit }.Record();
-            await Task.WhenAny(exitEventTask, Task.Delay(3000)); //don't prevent the app from closing for too long
             this.Close();
         }
 
         private async void changeFieldsMenuStripButton_Click(object sender, EventArgs e)
         {
-            MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.ChangeFields);
             var fieldList = await this.OpenFieldSelectionDialog(true);
             if (fieldList is not null)
                 this.SelectedFields = fieldList; //triggers a file load
@@ -95,7 +87,6 @@ namespace ParquetViewer
 
                 dataset.Tables.Remove(this.mainDataSource); //If we don't remove it, we can get errors in rare cases
 
-                MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.SQLCreateTable);
                 Clipboard.SetText(sql);
                 MessageBox.Show(this, Resources.Strings.CreateTableScriptCopiedToClipboardMessage, "ParquetViewer", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -107,7 +98,6 @@ namespace ParquetViewer
         {
             if (IsAnyFileOpen)
             {
-                MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.MetadataViewer);
                 using var metadataViewer = new MetadataViewer(this._openParquetEngine!);
                 metadataViewer.ShowDialog(this);
             }
@@ -121,14 +111,12 @@ namespace ParquetViewer
 
         private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.AboutBox);
             using var aboutForm = new AboutBox();
             aboutForm.ShowDialog(this);
         }
 
         private void userGuideToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.UserGuide);
             Process.Start(new ProcessStartInfo(Constants.WikiURL) { UseShellExecute = true });
         }
 
@@ -161,35 +149,6 @@ namespace ParquetViewer
                 this.RefreshDateFormatMenuItemSelection();
                 this.mainGridView.UpdateDateFormats();
                 this.mainGridView.Refresh();
-            }
-        }
-
-        private void shareAnonymousUsageDataToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            this.shareAnonymousUsageDataToolStripMenuItem.Checked = !this.shareAnonymousUsageDataToolStripMenuItem.Checked;
-            AppSettings.AnalyticsDataGatheringConsent = this.shareAnonymousUsageDataToolStripMenuItem.Checked;
-            AppSettings.ConsentLastAskedOnVersion = Env.AssemblyVersion;
-        }
-
-        private void shareAnonymousUsageDataToolStripMenuItem_CheckedChanged(object sender, System.EventArgs e)
-        {
-            RefreshExperimentalFeatureToolStrips();
-        }
-
-        private void RefreshExperimentalFeatureToolStrips()
-        {
-            foreach (ToolStripDropDownItem dropdownItem in this.shareAnonymousUsageDataToolStripMenuItem.DropDownItems)
-            {
-                if (dropdownItem is ToolStripMenuItem toolstrip && toolstrip.Checked)
-                {
-                    //If someone has an experimental feature enabled, don't hide the checkbox so they can disable it if they want.
-                    dropdownItem.Visible = true;
-                    continue;
-                }
-
-                //Expose experimental features to folks willing to share usage stats.
-                //Also better this way if we end up killing the beta feature.
-                dropdownItem.Visible = this.shareAnonymousUsageDataToolStripMenuItem.Checked;
             }
         }
 
@@ -228,7 +187,6 @@ namespace ParquetViewer
         {
             this.darkModeToolStripMenuItem.Checked = !this.darkModeToolStripMenuItem.Checked;
             AppSettings.DarkMode = this.darkModeToolStripMenuItem.Checked; // Will trigger SetTheme()
-            RefreshExperimentalFeatureToolStrips();
         }
     }
 }
