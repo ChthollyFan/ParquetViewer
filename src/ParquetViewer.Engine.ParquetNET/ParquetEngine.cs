@@ -1,4 +1,5 @@
-﻿using Parquet;
+﻿using Microsoft.Win32.SafeHandles;
+using Parquet;
 using Parquet.Meta;
 using Parquet.Data;
 using Parquet.Schema;
@@ -13,9 +14,16 @@ namespace ParquetViewer.Engine.ParquetNET
         // Parquet.Net 6.x 移除了 UseTimeOnlyTypeForTimeMillis/Micros 选项，仅保留日期相关选项
         private static readonly ParquetOptions _defaultParquetOptions = new() { UseDateOnlyTypeForDates = true };
         private readonly (string ParquetFilePath, ParquetReader Reader)[] _parquetFiles;
+
+        // 拼接式 parquet 文件（多个 parquet 文件首尾拼接在同一个文件里）的片段来源。
+        // 非 null 时数据由 _segmentSource 中的片段按顺序组成，_parquetFiles 为空数组。
+        private readonly ParquetSegmentSource? _segmentSource;
+
         private long? _recordCount;
 
-        private ParquetReader _defaultReader => _parquetFiles.Length > 0 ? _parquetFiles[0].Reader : throw new ParquetEngineException("No parquet readers available");
+        private ParquetReader _defaultReader => _parquetFiles.Length > 0
+            ? _parquetFiles[0].Reader
+            : _segmentSource?.DefaultReader ?? throw new ParquetEngineException("No parquet readers available");
 
         private FileMetaData _thriftMetadata => _defaultReader.Metadata ?? throw new ParquetEngineException("No thrift metadata was found");
 
@@ -23,9 +31,12 @@ namespace ParquetViewer.Engine.ParquetNET
 
         public Dictionary<string, string> CustomMetadata => _defaultReader.CustomMetadata;
 
-        public long RecordCount => _recordCount ??= _parquetFiles.Sum(pf => pf.Reader.Metadata?.NumRows ?? 0);
+        public long RecordCount => _recordCount ??= _segmentSource is not null
+            ? _segmentSource.TotalRowCount
+            : _parquetFiles.Sum(pf => pf.Reader.Metadata?.NumRows ?? 0);
 
-        public int NumberOfPartitions => _parquetFiles.Length;
+        // 拼接文件在文件系统上仍然只是一个文件，因此分区数按 1 统计
+        public int NumberOfPartitions => _segmentSource is not null ? 1 : _parquetFiles.Length;
 
         public List<string> Fields => _defaultReader.Schema.Fields.Select(f => f.Name).ToList();
 
@@ -37,6 +48,19 @@ namespace ParquetViewer.Engine.ParquetNET
         private ParquetEngine(string fileOrFolderPath, params (string FilePath, ParquetReader Reader)[] parquetFiles)
         {
             _parquetFiles = parquetFiles ?? throw new ArgumentNullException(nameof(parquetFiles), "No parquet readers provided");
+            _segmentSource = null;
+            Path = fileOrFolderPath;
+        }
+
+        /// <summary>
+        /// 以"拼接式 parquet 文件"的片段集合构造引擎。
+        /// </summary>
+        /// <param name="fileOrFolderPath">文件路径</param>
+        /// <param name="segmentSource">片段来源，负责按需打开各片段并统计总行数</param>
+        private ParquetEngine(string fileOrFolderPath, ParquetSegmentSource segmentSource)
+        {
+            _parquetFiles = Array.Empty<(string, ParquetReader)>();
+            _segmentSource = segmentSource ?? throw new ArgumentNullException(nameof(segmentSource));
             Path = fileOrFolderPath;
         }
 
@@ -100,13 +124,79 @@ namespace ParquetViewer.Engine.ParquetNET
             try
             {
                 readOnlyNonLockingStream = new FileStream(parquetFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                long fileLength = readOnlyNonLockingStream.Length;
                 var parquetReader = await ParquetReader.CreateAsync(readOnlyNonLockingStream, _defaultParquetOptions, false, cancellationToken);
+
+                // 部分数据源会把多个 parquet 文件首尾拼接成一个文件，这类文件的 footer 偏移只对最后一个片段有效，
+                // 按整文件解析会 seek 到错位位置读到别的片段数据，因此检测到偏移不匹配时改按片段逐个解析
+                if (parquetReader.Metadata is not null
+                    && ParquetFileSegments.HasUnmatchedFooterOffset(parquetFilePath, fileLength, parquetReader.Metadata))
+                {
+                    var segmentedEngine = await TryOpenSegmentedFileAsync(parquetFilePath, fileLength, parquetReader, readOnlyNonLockingStream, cancellationToken);
+                    if (segmentedEngine is not null)
+                    {
+                        return segmentedEngine;
+                    }
+                }
+
                 return new ParquetEngine(parquetFilePath, (parquetFilePath, parquetReader));
             }
             catch (Exception ex)
             {
                 readOnlyNonLockingStream?.Dispose();
                 throw new FileReadException(ex);
+            }
+        }
+
+        /// <summary>
+        /// 尝试把"多个 parquet 文件首尾拼接而成"的文件按片段逐个打开。
+        /// </summary>
+        /// <param name="parquetFilePath">文件路径</param>
+        /// <param name="fileLength">文件长度</param>
+        /// <param name="wholeFileReader">按整文件打开的 reader，确认是拼接文件后由本方法释放</param>
+        /// <param name="wholeFileStream">按整文件打开的流，确认是拼接文件后由本方法释放</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>拼接文件引擎；不是拼接文件时返回 null（此时传入的 reader 与流仍然有效）</returns>
+        private static async Task<ParquetEngine?> TryOpenSegmentedFileAsync(string parquetFilePath, long fileLength,
+            ParquetReader wholeFileReader, Stream wholeFileStream, CancellationToken cancellationToken)
+        {
+            // 片段边界只能靠扫描文件中的 PAR1 魔数确定，因此仅在 footer 偏移明显不匹配时才执行
+            SafeFileHandle fileHandle = File.OpenHandle(parquetFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            List<(long Offset, long Length)> segments;
+            try
+            {
+                segments = ParquetFileSegments.FindSegments(fileHandle, fileLength, cancellationToken);
+            }
+            catch
+            {
+                fileHandle.Dispose();
+                throw;
+            }
+
+            if (segments.Count <= 1)
+            {
+                // 偏移异常但并非拼接文件（例如数据区之后带有大段填充），仍按普通单文件处理
+                fileHandle.Dispose();
+                return null;
+            }
+
+            // 确认是拼接文件后再释放按整文件打开的 reader 与流
+            await wholeFileReader.DisposeAsync();
+            wholeFileStream.Dispose();
+
+            try
+            {
+                bool useDateOnlyTypeForDates = _defaultParquetOptions.UseDateOnlyTypeForDates;
+                ParquetReader firstSegmentReader = await ParquetSegmentSource.CreateSegmentReaderAsync(
+                    fileHandle, segments[0].Offset, segments[0].Length, useDateOnlyTypeForDates, cancellationToken);
+                ParquetSegmentSource segmentSource = await ParquetSegmentSource.OpenAsync(
+                    fileHandle, useDateOnlyTypeForDates, segments, firstSegmentReader, cancellationToken);
+                return new ParquetEngine(parquetFilePath, segmentSource);
+            }
+            catch
+            {
+                fileHandle.Dispose();
+                throw;
             }
         }
 
@@ -178,6 +268,17 @@ namespace ParquetViewer.Engine.ParquetNET
 
         private IEnumerable<(long RemainingOffset, ParquetReader ParquetReader)> GetReaders(long offset)
         {
+            if (_segmentSource is not null)
+            {
+                // 拼接文件：先按行号定位到片段，再由片段来源打开（必要时懒加载）对应 reader
+                foreach ((long remainingOffset, ParquetReader reader) in _segmentSource.GetReaders(offset))
+                {
+                    yield return (remainingOffset, reader);
+                }
+
+                yield break;
+            }
+
             foreach (var parquetFile in _parquetFiles)
             {
                 if (offset >= parquetFile.Reader.Metadata?.NumRows)
@@ -202,7 +303,8 @@ namespace ParquetViewer.Engine.ParquetNET
         /// </remarks>
         private async Task<ParquetReader> OpenAdditionalReaderAsync(CancellationToken cancellationToken)
         {
-            if (this._parquetFiles.Length != 1)
+            // 拼接文件的 reader 由 ParquetSegmentSource 统一管理，且其并行读取路径已关闭
+            if (this._parquetFiles.Length != 1 || this._segmentSource is not null)
             {
                 throw new InvalidOperationException("Additional readers are only supported for single file parquet engines");
             }
@@ -352,6 +454,9 @@ namespace ParquetViewer.Engine.ParquetNET
             {
                 reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
+
+            // 拼接文件：释放已缓存的片段 reader 与文件句柄
+            _segmentSource?.Dispose();
         }
 
         private static System.Type GetNullableVersion(System.Type sourceType) => sourceType == null
@@ -402,6 +507,9 @@ namespace ParquetViewer.Engine.ParquetNET
             return values;
         }
 
-        public IEnumerable<string> GetOpenParquetFilePaths() => this._parquetFiles.Select(db => db.ParquetFilePath);
+        // 拼接文件在文件系统上只是一个文件，因此只返回该文件路径（供文件变更监控使用）
+        public IEnumerable<string> GetOpenParquetFilePaths() => this._segmentSource is not null
+            ? [this.Path]
+            : this._parquetFiles.Select(db => db.ParquetFilePath);
     }
 }

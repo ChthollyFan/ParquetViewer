@@ -1,4 +1,4 @@
-using ParquetViewer.Engine.Exceptions;
+﻿using ParquetViewer.Engine.Exceptions;
 using ParquetViewer.Engine.Types;
 using System.Data;
 using System.Text.Json;
@@ -727,6 +727,59 @@ namespace ParquetViewer.Tests
             var dataTable = (await parquetEngine.ReadRowsAsync(parquetEngine.Fields, 0, int.MaxValue, default))(false);
             Assert.AreEqual(new DateOnly(2024, 1, 1), dataTable.Rows[0][0]);
             Assert.AreEqual(new TimeOnly(215720000000), dataTable.Rows[0][1]);
+        }
+
+        [SkippableTestMethod]
+        [SkipWhen(typeof(DuckDBEngineTests), "拼接式 parquet 文件需要按片段逐个解析，DuckDB 引擎不支持")]
+        public async Task SEGMENTED_PARQUET_FILE_TEST()
+        {
+            // 该文件由 3 个 parquet 文件首尾拼接而成，footer 偏移只对最后一个片段有效
+            using var parquetEngine = await OpenFileOrFolderAsync("Data/SEGMENTED_PARQUET_FILE_TEST.parquet", default);
+
+            Assert.AreEqual(9, parquetEngine.RecordCount); // 3 个片段各 3 行
+            Assert.HasCount(4, parquetEngine.Fields);
+            Assert.AreEqual(1, parquetEngine.NumberOfPartitions);
+            Assert.HasCount(1, parquetEngine.GetOpenParquetFilePaths().ToList());
+
+            var dataTable = (await parquetEngine.ReadRowsAsync(parquetEngine.Fields, 0, int.MaxValue, default))(false);
+            Assert.HasCount(9, dataTable.Rows.Cast<DataRow>());
+
+            // 逐行校验：第 3、6 行位于片段边界上，必须切换到下一个片段的数据
+            for (int i = 0; i < 9; i++)
+            {
+                Assert.AreEqual((long)i, dataTable.Rows[i][0]);
+                Assert.AreEqual($"seg{i / 3}-row{i % 3}", dataTable.Rows[i][1]);
+                Assert.AreEqual(new DateTime(2024, 1, 1).AddSeconds(i).AddMinutes(i / 3), dataTable.Rows[i][2]);
+                Assert.AreEqual(new DateOnly(2024, 1, 1).AddDays(i), dataTable.Rows[i][3]);
+            }
+
+            // 只读取跨越片段边界的一段行，验证分页偏移在片段之间也能正确换算
+            var partialTable = (await parquetEngine.ReadRowsAsync(parquetEngine.Fields, 3, 3, default))(false);
+            Assert.HasCount(3, partialTable.Rows.Cast<DataRow>());
+            Assert.AreEqual((long)3, partialTable.Rows[0][0]);
+            Assert.AreEqual((long)5, partialTable.Rows[2][0]);
+        }
+
+        [SkippableTestMethod]
+        [SkipWhen(typeof(DuckDBEngineTests), "该用例校验 Parquet.Net 引擎对 DELTA_BINARY_PACKED 时间列的兼容读取")]
+        public async Task DELTA_BINARY_PACKED_DATETIME_TEST()
+        {
+            // Parquet.Net 6.1.0 的 DELTA_BINARY_PACKED 解码不支持 DateTime/DateOnly，
+            // 引擎会降级为按物理整型读取再自行换算，这里校验换算结果
+            using var parquetEngine = await OpenFileOrFolderAsync("Data/DELTA_BINARY_PACKED_DATETIME_TEST.parquet", default);
+
+            Assert.AreEqual(3, parquetEngine.RecordCount);
+
+            var dataTable = (await parquetEngine.ReadRowsAsync(parquetEngine.Fields, 0, int.MaxValue, default))(false);
+
+            DateTime firstEvent = new DateTime(2024, 3, 5, 6, 7, 8).AddTicks(1234560); // 123456 微秒
+            for (int i = 0; i < 3; i++)
+            {
+                Assert.AreEqual(firstEvent.AddSeconds(i), dataTable.Rows[i]["ts_us"]);
+                Assert.AreEqual(firstEvent.AddSeconds(i), dataTable.Rows[i]["ts_ns"]);
+                Assert.AreEqual(new DateOnly(2024, 3, 5).AddDays(i), dataTable.Rows[i]["d32"]);
+                Assert.AreEqual((long)i, dataTable.Rows[i]["plain_id"]);
+            }
         }
     }
 }
