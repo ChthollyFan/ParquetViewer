@@ -11,22 +11,87 @@ namespace ParquetViewer.Engine.ParquetNET
 {
     public partial class ParquetEngine
     {
+        /// <summary>按 row group 并行读取时引擎内部的并行度上限</summary>
+        /// <remarks>实测 12 核机器上 8 线程以后加速比已饱和（磁盘与解码内存分配成为瓶颈），再增加线程只增内存峰值。</remarks>
+        private const int MAX_READ_PARALLELISM = 8;
+
+        /// <summary>预分配 DataTableLite 行容量时的上限</summary>
+        /// <remarks>请求行数可能达到上亿，按请求量一次性预分配底层数组会直接吃掉数 GB 内存。</remarks>
+        private const int MAX_PREFETCH_ROW_CAPACITY = 1_000_000;
+
+        /// <summary>row group 内需要读取的行区间（相对该 row group 起始行）</summary>
+        private readonly record struct RowSlice(long SkipRecords, long ReadRecords);
+
+        /// <summary>一次读取请求在单个文件内的连续行区间（按 row group 边界切分）</summary>
+        private readonly record struct ReadSegment(long Offset, long RecordCount);
+
+        /// <summary>
+        /// 批次进度上报：把逐单元格的进度回调合并为每 <see cref="BatchSize"/> 个上报一次。
+        /// </summary>
+        /// <remarks>进度条总量仍以单元格计，只是减少回调次数；使用方必须在结束时调用 <see cref="Flush"/> 上报余数。</remarks>
+        private sealed class ProgressBatcher
+        {
+            private const int BatchSize = 1024;
+
+            private readonly IProgress<int>? _progress;
+            private int _pending;
+
+            public ProgressBatcher(IProgress<int>? progress) => this._progress = progress;
+
+            /// <summary>记录一个单元格的进度，累积到批次大小后统一上报</summary>
+            public void ReportOne()
+            {
+                if (this._progress is null)
+                {
+                    return;
+                }
+
+                this._pending++;
+                if (this._pending >= BatchSize)
+                {
+                    Flush();
+                }
+            }
+
+            /// <summary>上报尚未提交的进度</summary>
+            public void Flush()
+            {
+                if (this._progress is null || this._pending == 0)
+                {
+                    return;
+                }
+
+                this._progress.Report(this._pending);
+                this._pending = 0;
+            }
+        }
+
         public async Task<Func<bool, DataTable>> ReadRowsAsync(List<string> selectedFields, int offset, int recordCount, CancellationToken cancellationToken, IProgress<int>? progress = null)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recordCount, nameof(recordCount));
             ArgumentOutOfRangeException.ThrowIfNegative(offset, nameof(offset));
 
-            long recordsLeftToRead = recordCount;
-            DataTableLite result = BuildDataTable(null, selectedFields, Math.Min(recordCount, (int)this.RecordCount));
+            // 行容量按请求量预分配，但设上限，避免超大请求直接分配数 GB 的底层数组
+            DataTableLite result = BuildDataTable(null, selectedFields, Math.Min(recordCount, Math.Min((int)this.RecordCount, MAX_PREFETCH_ROW_CAPACITY)));
 
-            foreach (var reader in this.GetReaders(offset))
+            // 单文件且请求跨越多个 row group 时按 row group 分片并行读取，分片结果再按顺序合并
+            List<ReadSegment>? parallelSegments = TryBuildParallelSegments(offset, recordCount);
+            if (parallelSegments is not null)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                await ReadSegmentsInParallelAsync(result, selectedFields, parallelSegments, cancellationToken, progress);
+            }
+            else
+            {
+                long recordsLeftToRead = recordCount;
+                foreach (var reader in this.GetReaders(offset))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                if (recordsLeftToRead <= 0)
-                    break;
+                    if (recordsLeftToRead <= 0)
+                        break;
 
-                recordsLeftToRead = await PopulateDataTable(result, reader.ParquetReader, reader.RemainingOffset, recordsLeftToRead, cancellationToken, progress);
+                    recordsLeftToRead = await PopulateDataTable(result, reader.ParquetReader, reader.RemainingOffset, recordsLeftToRead, cancellationToken, progress);
+                }
             }
 
             result.DataSetSize = this.RecordCount;
@@ -75,6 +140,241 @@ namespace ParquetViewer.Engine.ParquetNET
             return rowsLeftToRead;
         }
 
+        /// <summary>
+        /// 计算本次请求的并行读取分片；不满足并行条件时返回 null，调用方回退到原有串行路径。
+        /// </summary>
+        /// <param name="offset">请求起始行（文件内绝对行号）</param>
+        /// <param name="recordCount">请求行数</param>
+        /// <returns>按 row group 边界切分的连续行区间，或 null 表示不分片</returns>
+        /// <remarks>
+        /// 并行分片需要为每个分片打开独立 reader，因此只对单文件场景启用，多文件仍走原有的跨文件串行逻辑。
+        /// 分片边界对齐到 row group，避免同一个 row group 被两个分片重复解码。
+        /// </remarks>
+        private List<ReadSegment>? TryBuildParallelSegments(long offset, int recordCount)
+        {
+            if (this._parquetFiles.Length != 1)
+            {
+                return null;
+            }
+
+            int maxParallelism = ResolveMaxReadParallelism();
+            if (maxParallelism <= 1)
+            {
+                return null;
+            }
+
+            long end = Math.Min(offset + recordCount, this.RecordCount);
+            if (offset >= end)
+            {
+                return null;
+            }
+
+            // 分片边界按 thrift 元数据的行组行数计算，而实际读取用的是运行时的 row group 行数，
+            // 两者不一致（损坏或异常文件）时分片会错位，这种情况下直接回退到串行读取
+            long totalRowGroupRows = 0;
+            foreach (Parquet.Meta.RowGroup rowGroup in this._thriftMetadata.RowGroups)
+            {
+                totalRowGroupRows += rowGroup.NumRows;
+            }
+
+            if (totalRowGroupRows != this.RecordCount)
+            {
+                return null;
+            }
+
+            List<ReadSegment> rowGroupSegments = new();
+            long rowGroupStart = 0;
+            foreach (Parquet.Meta.RowGroup rowGroup in this._thriftMetadata.RowGroups)
+            {
+                long rowGroupEnd = rowGroupStart + rowGroup.NumRows;
+                long segmentStart = Math.Max(rowGroupStart, offset);
+                long segmentEnd = Math.Min(rowGroupEnd, end);
+                if (segmentEnd > segmentStart)
+                {
+                    rowGroupSegments.Add(new ReadSegment(segmentStart, segmentEnd - segmentStart));
+                }
+
+                rowGroupStart = rowGroupEnd;
+                if (rowGroupStart >= end)
+                {
+                    break;
+                }
+            }
+
+            if (rowGroupSegments.Count < 2)
+            {
+                // 只覆盖一个 row group 时无法拆分，并行读同一组只会重复解码
+                return null;
+            }
+
+            return MergeSegments(rowGroupSegments, Math.Min(maxParallelism, rowGroupSegments.Count));
+        }
+
+        /// <summary>
+        /// 把相邻的 row group 区间合并成行数尽量均衡的若干分片。
+        /// </summary>
+        /// <param name="segments">按行号升序排列的 row group 区间</param>
+        /// <param name="shardCount">目标分片数</param>
+        /// <returns>合并后的分片，保持原有行序</returns>
+        private static List<ReadSegment> MergeSegments(List<ReadSegment> segments, int shardCount)
+        {
+            long totalRows = 0;
+            foreach (ReadSegment segment in segments)
+            {
+                totalRows += segment.RecordCount;
+            }
+
+            long targetRowsPerShard = (totalRows + shardCount - 1) / shardCount;
+            List<ReadSegment> shards = new(shardCount);
+            int index = 0;
+            for (int shard = 0; shard < shardCount && index < segments.Count; shard++)
+            {
+                bool isLastShard = shard == shardCount - 1;
+                long shardStart = segments[index].Offset;
+                long shardRows = 0;
+
+                // 最后一个分片直接接收剩余区间，避免向上取整导致前面分片偏大
+                // 每个分片至少取一个 row group 区间，否则并行度会超过实际可分片的数量
+                while (index < segments.Count && (isLastShard || shardRows == 0 || shardRows < targetRowsPerShard))
+                {
+                    shardRows += segments[index].RecordCount;
+                    index++;
+                }
+
+                shards.Add(new ReadSegment(shardStart, shardRows));
+            }
+
+            return shards;
+        }
+
+        /// <summary>
+        /// 解析当前生效的并行度。
+        /// </summary>
+        /// <returns>返回值大于 1 表示可以并行</returns>
+        private static int ResolveMaxReadParallelism()
+        {
+            int configured = ParquetEngineSettings.MaxReadParallelism;
+            if (configured == 1)
+            {
+                return 1;
+            }
+
+            int auto = Math.Min(Environment.ProcessorCount, MAX_READ_PARALLELISM);
+            return configured <= 1 ? auto : Math.Min(configured, auto);
+        }
+
+        /// <summary>
+        /// 并行读取各分片，并把结果按分片顺序合并进汇总表。
+        /// </summary>
+        /// <param name="result">汇总结果表（调用时还没有任何行）</param>
+        /// <param name="selectedFields">选中的字段</param>
+        /// <param name="segments">已按行号升序排列的分片</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <param name="progress">进度回调</param>
+        /// <remarks>
+        /// 每个分片持有独立的 ParquetReader：ParquetRowGroupReader 共享底层流并依赖流位置，
+        /// 多线程并发读取同一个 reader 会互相破坏读位置，所以不能直接把现有循环改成 Parallel.For。
+        /// </remarks>
+        private async Task ReadSegmentsInParallelAsync(DataTableLite result, List<string> selectedFields, List<ReadSegment> segments,
+            CancellationToken cancellationToken, IProgress<int>? progress)
+        {
+            // 列定义在串行阶段先克隆好，避免多个分片并发初始化 schema 元数据
+            DataTableLite shardTemplate = result.Clone();
+
+            ParquetReader[] readers = new ParquetReader[segments.Count];
+            bool[] ownsReader = new bool[segments.Count];
+            try
+            {
+                // 第一个分片复用引擎自身的 reader，其余分片并行打开，省掉串行等待 footer 解析的时间
+                readers[0] = this._defaultReader;
+
+                Task<ParquetReader>[] openTasks = new Task<ParquetReader>[segments.Count - 1];
+                for (int i = 0; i < openTasks.Length; i++)
+                {
+                    openTasks[i] = this.OpenAdditionalReaderAsync(cancellationToken);
+                }
+
+                try
+                {
+                    ParquetReader[] additionalReaders = await Task.WhenAll(openTasks);
+                    for (int i = 0; i < additionalReaders.Length; i++)
+                    {
+                        readers[i + 1] = additionalReaders[i];
+                        ownsReader[i + 1] = true;
+                    }
+                }
+                catch
+                {
+                    // 打开失败时清理已经成功打开的 reader，避免文件句柄泄漏
+                    foreach (Task<ParquetReader> openTask in openTasks)
+                    {
+                        if (openTask.Status == TaskStatus.RanToCompletion)
+                        {
+                            await openTask.Result.DisposeAsync();
+                        }
+                    }
+
+                    throw;
+                }
+
+                Task<DataTableLite>[] readTasks = new Task<DataTableLite>[segments.Count];
+                for (int i = 0; i < segments.Count; i++)
+                {
+                    ParquetReader shardReader = readers[i];
+                    ReadSegment segment = segments[i];
+                    readTasks[i] = Task.Run(() => ReadSegmentAsync(selectedFields, shardTemplate, shardReader, segment, cancellationToken, progress));
+                }
+
+                // Task.WhenAll 只有在全部分片结束后才会抛出异常，因此异常路径下释放 reader 也是安全的
+                DataTableLite[] shards = await Task.WhenAll(readTasks);
+
+                // 按分片顺序合并，保证行序与串行读取完全一致
+                foreach (DataTableLite shard in shards)
+                {
+                    result.AppendRowsFrom(shard);
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < readers.Length; i++)
+                {
+                    if (!ownsReader[i])
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        await readers[i].DisposeAsync();
+                    }
+                    catch
+                    {
+                        // 释放失败不影响已读取的数据，吞掉以保证其余 reader 也能被释放
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 读取单个分片，返回只包含该分片行的独立数据表。
+        /// </summary>
+        /// <param name="selectedFields">选中的字段</param>
+        /// <param name="shardTemplate">列定义模板（只有列、没有行）</param>
+        /// <param name="reader">该分片独占的 reader</param>
+        /// <param name="segment">该分片覆盖的行区间</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <param name="progress">进度回调</param>
+        /// <returns>该分片的数据表</returns>
+        /// <remarks>各分片写入各自的表，避免多线程并发写入同一张表。</remarks>
+        private async Task<DataTableLite> ReadSegmentAsync(List<string> selectedFields, DataTableLite shardTemplate, ParquetReader reader,
+            ReadSegment segment, CancellationToken cancellationToken, IProgress<int>? progress)
+        {
+            DataTableLite shard = shardTemplate.Clone();
+            shard.EnsureCapacity((int)Math.Min(segment.RecordCount, MAX_PREFETCH_ROW_CAPACITY));
+            await PopulateDataTable(shard, reader, segment.Offset, segment.RecordCount, cancellationToken, progress);
+            return shard;
+        }
+
         private async Task ProcessRowGroup(DataTableLite dataTable, ParquetRowGroupReader groupReader,
             long skipRecords, long readRecords, CancellationToken cancellationToken, IProgress<int>? progress)
         {
@@ -119,7 +419,6 @@ namespace ParquetViewer.Engine.ParquetNET
             long skipRecords, long readRecords, bool isFirstColumn, CancellationToken cancellationToken, IProgress<int>? progress)
         {
             var rowIndex = rowBeginIndex;
-            int skippedRecords = 0;
             var fieldIndex = dataTable.Columns[field.Path]?.Ordinal ?? throw new ParquetEngineException($"Column `{field.Path}` is missing");
 
             if (field.BelongsToListField || field.BelongsToListOfStructsField || field.DataField?.IsArray == true)
@@ -128,19 +427,17 @@ namespace ParquetViewer.Engine.ParquetNET
             }
             else
             {
-                var dataColumn = await ReadColumnAsync(groupReader, field, cancellationToken);
+                // 行对齐的普通列：把 skip/read 区间下推到列读取阶段，只转换（装箱）真正要返回的行。
+                // 之前会先把整个 row group 装箱成 object[] 再逐值丢弃，翻页只取少量行时浪费极大。
+                var dataColumn = await ReadColumnAsync(groupReader, field, cancellationToken, new RowSlice(skipRecords, readRecords));
                 var dataEnumerable = dataColumn.GetDataWithPaddedNulls(field);
 
                 var fieldType = dataTable.Columns[field.Path].Type;
+                var progressBatcher = new ProgressBatcher(progress);
+
                 foreach (var value in dataEnumerable)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-
-                    if (skipRecords > skippedRecords)
-                    {
-                        skippedRecords++;
-                        continue;
-                    }
 
                     if (rowIndex - rowBeginIndex >= readRecords)
                         break;
@@ -164,8 +461,11 @@ namespace ParquetViewer.Engine.ParquetNET
                     }
 
                     rowIndex++;
-                    progress?.Report(1);
+                    progressBatcher.ReportOne();
                 }
+
+                // 上报不足一批的余数，否则进度条到不了 100%
+                progressBatcher.Flush();
             }
         }
 
@@ -203,6 +503,7 @@ namespace ParquetViewer.Engine.ParquetNET
                         itemField.CurrentDefinitionLevel, itemField.DataField?.MaxDefinitionLevel ?? 0, cancellationToken);
                     lastMilestone = "ReadRows";
 
+                    var progressBatcher = new ProgressBatcher(progress);
                     foreach (var listValue in listValues)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -214,8 +515,11 @@ namespace ParquetViewer.Engine.ParquetNET
 
                         dataTable.Rows[rowIndex][fieldIndex] = listValue;
                         rowIndex++;
-                        progress?.Report(1);
+                        progressBatcher.ReportOne();
                     }
+
+                    // 上报不足一批的余数
+                    progressBatcher.Flush();
                 }
                 else if (itemField.FieldType == FieldTypeId.Struct)
                 {
@@ -367,6 +671,7 @@ namespace ParquetViewer.Engine.ParquetNET
 
             var levelCount = Math.Max(keyDataColumn.RepetitionLevels?.Length ?? 0, valueDataColumn.RepetitionLevels?.Length ?? 0);
             var fieldIndex = dataTable.Columns[field.Path]!.Ordinal;
+            var progressBatcher = new ProgressBatcher(progress);
             ArrayList? mapKeys = null;
             ArrayList? mapValues = null;
             int index = -1;
@@ -410,7 +715,7 @@ namespace ParquetViewer.Engine.ParquetNET
                     mapValues = null;
 
                     rowIndex++;
-                    progress?.Report(1);
+                    progressBatcher.ReportOne();
 
                     if (rowIndex - rowBeginIndex >= readRecords)
                         break;
@@ -433,6 +738,9 @@ namespace ParquetViewer.Engine.ParquetNET
                         throw new ArgumentOutOfRangeException(nameof(dataIndex));
                 }
             }
+
+            // 上报不足一批的余数
+            progressBatcher.Flush();
         }
 
         private async Task ReadStructField(DataTableLite dataTable, ParquetRowGroupReader groupReader, int rowBeginIndex, ParquetSchemaElement field,
@@ -477,20 +785,36 @@ namespace ParquetViewer.Engine.ParquetNET
         private SimpleProgress StructReadProgress(IProgress<int>? _progress, int fieldCount)
         {
             var progress = new SimpleProgress();
-            progress.ProgressChanged += (int progressSoFar) =>
+
+            if (fieldCount <= 0)
             {
-                if (fieldCount > 0)
+                //If the struct field has no columns, then each read is one row.
+                var lastTotalSoFar = 0;
+                progress.ProgressChanged += (int totalSoFar) =>
                 {
-                    //To report progress accurately we'll need to divide the progress total  
-                    //by the field count to convert it to row count in the main data table.
-                    var increment = progressSoFar % fieldCount;
-                    if (increment == 0)
-                        _progress?.Report(1);
-                }
-                else
+                    var delta = totalSoFar - lastTotalSoFar;
+                    lastTotalSoFar = totalSoFar;
+                    _progress?.Report(delta);
+                };
+                return progress;
+            }
+
+            // 底层读取现在按批上报（一次可能前进多个单元格），这里按增量折算成整行后再上报。
+            // 之前用“累计值是否为字段数整数倍”判断，批次上报后累计值可能永远落不到整数倍上，会导致 struct 进度卡住。
+            var lastReportedTotal = 0;
+            var pendingCells = 0;
+            progress.ProgressChanged += (int totalSoFar) =>
+            {
+                pendingCells += totalSoFar - lastReportedTotal;
+                lastReportedTotal = totalSoFar;
+
+                //To report progress accurately we'll need to divide the progress total
+                //by the field count to convert it to row count in the main data table.
+                var completedRows = pendingCells / fieldCount;
+                if (completedRows > 0)
                 {
-                    //If the struct field has no columns, then each read is one row.
-                    _progress?.Report(1);
+                    pendingCells -= completedRows * fieldCount;
+                    _progress?.Report(completedRows);
                 }
             };
             return progress;
@@ -544,14 +868,23 @@ namespace ParquetViewer.Engine.ParquetNET
             return dataTable;
         }
 
-        private static async Task<RawColumnDataView> ReadColumnAsync(ParquetRowGroupReader groupReader, ParquetSchemaElement field, CancellationToken cancellationToken)
+        /// <summary>
+        /// 读取一个 row group 内的列数据。
+        /// </summary>
+        /// <param name="groupReader">当前 row group 读取器</param>
+        /// <param name="field">列对应的字段</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <param name="slice">需要返回的行区间；null 表示返回整个 row group（列表/映射/结构列必须传 null，它们的层级数组要与完整行对齐）</param>
+        /// <returns>列数据视图；指定 slice 时 Data 与层级数组只包含该区间</returns>
+        private static async Task<RawColumnDataView> ReadColumnAsync(ParquetRowGroupReader groupReader, ParquetSchemaElement field,
+            CancellationToken cancellationToken, RowSlice? slice = null)
         {
             try
             {
                 // Parquet.Net 6.x 用 ReadRawColumnDataBaseAsync 取代 ReadColumnAsync，返回泛型 RawColumnData<T>
                 var dataField = field.DataField ?? throw new MalformedFieldException($"Field `{field.PathWithParent}` has no data field");
                 var rawColumnData = await groupReader.ReadRawColumnDataBaseAsync(dataField, cancellationToken);
-                return await ConvertRawColumnDataView(groupReader, dataField, rawColumnData, field, cancellationToken);
+                return await ConvertRawColumnDataView(groupReader, dataField, rawColumnData, field, slice, cancellationToken);
             }
             catch (OverflowException ex)
             {
@@ -585,9 +918,10 @@ namespace ParquetViewer.Engine.ParquetNET
         /// <param name="dataField">列对应的 DataField</param>
         /// <param name="rawColumnData">库返回的原始列数据</param>
         /// <param name="field">字段定义</param>
+        /// <param name="slice">需要返回的行区间；null 表示整个 row group</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>统一视图，Data 为每行值的 object 数组</returns>
-        private static async Task<RawColumnDataView> ConvertRawColumnDataView(ParquetRowGroupReader groupReader, DataField dataField, RawColumnData rawColumnData, ParquetSchemaElement field, CancellationToken cancellationToken)
+        private static async Task<RawColumnDataView> ConvertRawColumnDataView(ParquetRowGroupReader groupReader, DataField dataField, RawColumnData rawColumnData, ParquetSchemaElement field, RowSlice? slice, CancellationToken cancellationToken)
         {
             // 若 CLR 类型为 Nullable<T>，库返回的 RawColumnData<T> 以非空 T 为泛型参数
             var actualType = Nullable.GetUnderlyingType(dataField.ClrType) ?? dataField.ClrType;
@@ -598,7 +932,7 @@ namespace ParquetViewer.Engine.ParquetNET
                 .MakeGenericMethod(actualType);
             try
             {
-                return await (Task<RawColumnDataView>)method.Invoke(null, new object[] { groupReader, dataField, rawColumnData, timePrecision, cancellationToken })!;
+                return await (Task<RawColumnDataView>)method.Invoke(null, new object?[] { groupReader, dataField, rawColumnData, timePrecision, slice, cancellationToken })!;
             }
             catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
             {
@@ -608,7 +942,7 @@ namespace ParquetViewer.Engine.ParquetNET
             }
         }
 
-        private static async Task<RawColumnDataView> ConvertRawColumnDataViewGeneric<T>(ParquetRowGroupReader groupReader, DataField dataField, RawColumnData rawColumnData, Parquet.Schema.TimeUnitPrecision? timePrecision, CancellationToken cancellationToken) where T : struct
+        private static async Task<RawColumnDataView> ConvertRawColumnDataViewGeneric<T>(ParquetRowGroupReader groupReader, DataField dataField, RawColumnData rawColumnData, Parquet.Schema.TimeUnitPrecision? timePrecision, RowSlice? slice, CancellationToken cancellationToken) where T : struct
         {
             var typed = (RawColumnData<T>)rawColumnData;
 
@@ -635,15 +969,42 @@ namespace ParquetViewer.Engine.ParquetNET
                 definitionLevels = null;
             }
 
+            // 用显式循环代替 LINQ 判定是否存在 null：这里要扫过整个 row group 的层级数组，LINQ 的委托开销在百万级行数上不可忽略
+            var hasNulls = false;
+            if (definitionLevels is not null)
+            {
+                for (var i = 0; i < definitionLevels.Length; i++)
+                {
+                    if (definitionLevels[i] < dataField.MaxDefinitionLevel)
+                    {
+                        hasNulls = true;
+                        break;
+                    }
+                }
+            }
+
+            var positionCount = definitionLevels?.Length ?? typed.Values.Length;
+
+            // 行区间裁剪：只转换真正要返回的行。
+            // 只有行对齐的普通列会传入 slice（此时每个位置对应一行），列表/映射/结构列的层级数组必须保持完整。
+            var rangeStart = 0;
+            var rangeEnd = positionCount;
+            if (slice is not null)
+            {
+                rangeStart = (int)Math.Clamp(slice.Value.SkipRecords, 0, positionCount);
+                rangeEnd = (int)Math.Clamp(slice.Value.SkipRecords + slice.Value.ReadRecords, rangeStart, positionCount);
+            }
+
             object?[] data;
-            if (definitionLevels is null || !definitionLevels.Any(d => d < dataField.MaxDefinitionLevel))
+            if (!hasNulls)
             {
                 // 无 def levels（required 列）或列不含 null 时，Values 每位置一个值且无 null，可直接使用
                 var values = typed.Values;
-                data = new object?[values.Length];
-                for (var i = 0; i < values.Length; i++)
+                var valueRangeEnd = Math.Min(rangeEnd, values.Length);
+                data = new object?[Math.Max(valueRangeEnd - rangeStart, 0)];
+                for (var i = rangeStart; i < valueRangeEnd; i++)
                 {
-                    data[i] = NormalizeColumnValue(values[i], timePrecision);
+                    data[i - rangeStart] = NormalizeColumnValue(values[i], timePrecision);
                 }
             }
             else
@@ -651,26 +1012,40 @@ namespace ParquetViewer.Engine.ParquetNET
                 // 6.1.0 的 Values 对含 null 项/空项的列表列会错位（null 位置被后续物理值占用），
                 // 改用 ReadRawAsync 重读物理值流（只含有值位置的值），并按 def==maxDef 展开重建，恢复 5.x 语义
                 var maxDefinitionLevel = dataField.MaxDefinitionLevel;
-                var positionCount = definitionLevels.Length;
                 // 库可能额外写行标记，放大 defs/reps buffer 避免越界
                 var bufferSize = positionCount + (int)Math.Min(groupReader.RowCount, int.MaxValue);
                 var valuesBuffer = new T[positionCount];
                 var defsBuffer = new int[bufferSize];
                 var repsBuffer = new int[bufferSize];
                 await groupReader.ReadRawAsync(dataField, valuesBuffer.AsMemory(), defsBuffer.AsMemory(), repsBuffer.AsMemory(), cancellationToken);
-                data = new object?[positionCount];
+
+                // 先数出区间之前有多少个有效值，作为物理值下标的起点（只计数，不装箱）
                 var valueIndex = 0;
-                for (var i = 0; i < positionCount; i++)
+                for (var i = 0; i < rangeStart; i++)
                 {
-                    if (definitionLevels[i] == maxDefinitionLevel)
+                    if (definitionLevels![i] == maxDefinitionLevel)
+                        valueIndex++;
+                }
+
+                data = new object?[rangeEnd - rangeStart];
+                for (var i = rangeStart; i < rangeEnd; i++)
+                {
+                    if (definitionLevels![i] == maxDefinitionLevel)
                     {
-                        data[i] = NormalizeColumnValue(valuesBuffer[valueIndex++], timePrecision);
+                        data[i - rangeStart] = NormalizeColumnValue(valuesBuffer[valueIndex++], timePrecision);
                     }
                     else
                     {
-                        data[i] = DBNull.Value;
+                        data[i - rangeStart] = DBNull.Value;
                     }
                 }
+            }
+
+            // 裁剪时层级数组要按同一区间裁剪，保证索引 0 对应请求的第一行
+            if (slice is not null)
+            {
+                definitionLevels = SliceLevels(definitionLevels, rangeStart, rangeEnd);
+                repetitionLevels = SliceLevels(repetitionLevels, rangeStart, rangeEnd);
             }
 
             return new RawColumnDataView
@@ -679,6 +1054,31 @@ namespace ParquetViewer.Engine.ParquetNET
                 DefinitionLevels = definitionLevels,
                 RepetitionLevels = repetitionLevels
             };
+        }
+
+        /// <summary>
+        /// 把层级数组裁剪到指定区间。
+        /// </summary>
+        /// <param name="levels">原始层级数组，可为 null</param>
+        /// <param name="rangeStart">区间起始下标</param>
+        /// <param name="rangeEnd">区间结束下标（不含）</param>
+        /// <returns>裁剪后的数组；数组为空或长度不足以覆盖区间时返回 null</returns>
+        /// <remarks>返回 null 与“没有层级信息”语义一致，切片路径只用于行对齐的普通列，不会因此丢失列表对齐所需的信息。</remarks>
+        private static int[]? SliceLevels(int[]? levels, int rangeStart, int rangeEnd)
+        {
+            if (levels is null || levels.Length < rangeEnd)
+            {
+                return null;
+            }
+
+            if (rangeStart == 0 && rangeEnd == levels.Length)
+            {
+                return levels;
+            }
+
+            int[] sliced = new int[rangeEnd - rangeStart];
+            Array.Copy(levels, rangeStart, sliced, 0, sliced.Length);
+            return sliced;
         }
 
         /// <summary>
