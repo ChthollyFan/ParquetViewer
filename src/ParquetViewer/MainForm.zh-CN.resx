@@ -209,6 +209,9 @@
   <data name="loadAllRowsButton.ToolTip" xml:space="preserve">
     <value>加载所有记录 (Ctrl+E)</value>
   </data>
+  <data name="nextOffsetButton.ToolTip" xml:space="preserve">
+    <value>跳转到下一个偏移量（按当前记录数量向后翻页）</value>
+  </data>
   <data name="mainTableLayoutPanel.ToolTip" xml:space="preserve">
     <value />
   </data>
@@ -431,15 +434,6 @@
   </data>
   <data name="userGuideToolStripMenuItem.Text" xml:space="preserve">
     <value>用户指南</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.Size" type="System.Drawing.Size, System.Drawing">
-    <value>187, 22</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.Text" xml:space="preserve">
-    <value>共享使用数据</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.ToolTipText" xml:space="preserve">
-    <value>隐私政策链接请参阅“关于”页面</value>
   </data>
   <data name="languageToolStripMenuItem.Size" type="System.Drawing.Size, System.Drawing">
     <value>187, 22</value>

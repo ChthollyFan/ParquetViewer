@@ -117,6 +117,12 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="LargeFileLoadWarningMessageFormat" xml:space="preserve">
+    <value>该文件共有 {0} 行，超过单次加载上限 {1} 行。&#xA;&#xA;一次加载这么多行会耗尽内存并导致程序崩溃。&#xA;&#xA;是否改为加载前 {1} 行？</value>
+  </data>
+  <data name="LargeFileLoadWarningTitle" xml:space="preserve">
+    <value>大文件提示</value>
+  </data>
   <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
     <value>{0} 到 {1}</value>
   </data>
@@ -271,14 +277,6 @@ IN 检查:
   </data>
   <data name="DotNetDateFormatHelpUrl" xml:space="preserve">
     <value>https://docs.microsoft.com/zh-cn/dotnet/standard/base-types/custom-date-and-time-format-strings</value>
-  </data>
-  <data name="AnalyticsConsentPromptMessage" xml:space="preserve">
-    <value>是否愿意共享匿名使用数据以帮助改进 ParquetViewer?
-
-你随时可以在“帮助”菜单中更改此设置。</value>
-  </data>
-  <data name="AnalyticsConsentPromptTitle" xml:space="preserve">
-    <value>共享匿名使用数据?</value>
   </data>
   <data name="FileExtensionAssociationPromptMessageFormat" xml:space="preserve">
     <value>是否将 ParquetViewer 与 .parquet 文件关联?

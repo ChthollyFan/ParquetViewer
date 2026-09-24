@@ -117,6 +117,14 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="LargeFileLoadWarningMessageFormat" xml:space="preserve">
+    <value>This file has {0} rows, which is over the {1} row limit for a single load.&#xA;&#xA;Loading this many rows at once can exhaust memory and crash the application.&#xA;&#xA;Load the first {1} rows instead?</value>
+    <comment>Confirmation shown before loading a file whose row count exceeds the single-load limit. {0} is the total row count, {1} is the maximum number of rows that will be loaded.</comment>
+  </data>
+  <data name="LargeFileLoadWarningTitle" xml:space="preserve">
+    <value>Large file</value>
+    <comment>Title of the confirmation dialog shown when a file exceeds the single-load row limit</comment>
+  </data>
   <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
     <value>{0} to {1}</value>
     <comment>This is the value shown in the bottom right status bar once records are loaded from a parquet file. Example: "0 to 1000"</comment>
@@ -315,16 +323,6 @@ Would you like to switch to a {2} file instead?</value>
   <data name="DotNetDateFormatHelpUrl" xml:space="preserve">
     <value>https://docs.microsoft.com/en-us/dotnet/standard/base-types/custom-date-and-time-format-strings</value>
     <comment>This is the link that the user will be taken to if they click on the link label at the bottom of the custom date format configuration screen.</comment>
-  </data>
-  <data name="AnalyticsConsentPromptMessage" xml:space="preserve">
-    <value>Would you like to share anonymous usage data to help make ParquetViewer better?
-
-You can always change this setting later from the Help menu.</value>
-    <comment>Message box text that is shown when asking the user if we can gather analytics data</comment>
-  </data>
-  <data name="AnalyticsConsentPromptTitle" xml:space="preserve">
-    <value>Share Anonymous Usage Data?</value>
-    <comment>Message box title that is shown when asking the user if we can gather analytics data</comment>
   </data>
   <data name="FileExtensionAssociationPromptMessageFormat" xml:space="preserve">
     <value>Would you like to associate ParquetViewer with .parquet files?

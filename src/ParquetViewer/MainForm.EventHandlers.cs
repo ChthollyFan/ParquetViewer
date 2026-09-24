@@ -1,11 +1,9 @@
-﻿using ParquetViewer.Analytics;
-using ParquetViewer.Engine;
+﻿using ParquetViewer.Engine;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Exceptions;
 using ParquetViewer.Helpers;
 using System;
 using System.Data;
-using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -21,7 +19,6 @@ namespace ParquetViewer
         [GeneratedRegex("^WHERE ")]
         private static partial Regex QueryUselessPartRegex();
 
-        private int _failedFileIntegrityCheckCount = 0;
 
         private void offsetTextBox_KeyPress(object sender, KeyPressEventArgs e)
         {
@@ -39,7 +36,7 @@ namespace ParquetViewer
             }
         }
 
-        private void offsetTextBox_TextChanged(object sender, EventArgs e)
+        private void offsetTextBox_TextChanged(object sender, EventArgs? e)
         {
             var textbox = (TextBox)sender;
             if (int.TryParse(textbox.Text, out var offset))
@@ -52,7 +49,16 @@ namespace ParquetViewer
         {
             var textbox = (TextBox)sender;
             if (int.TryParse(textbox.Text, out var recordCount) && recordCount > 0)
+            {
                 this.CurrentMaxRowCount = recordCount;
+
+                // 输入值被单次加载上限截断时把文本框回写成实际生效的数字，
+                // 否则用户看到的行数和真正加载的行数会不一致
+                if (this.CurrentMaxRowCount != recordCount)
+                {
+                    textbox.Text = this.CurrentMaxRowCount.ToString();
+                }
+            }
             else
                 textbox.Text = this.CurrentMaxRowCount.ToString();
         }
@@ -76,7 +82,6 @@ namespace ParquetViewer
                 var files = e.Data?.GetData(DataFormats.FileDrop) as string[];
                 if (files?.Length > 0)
                 {
-                    MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.DragDrop);
                     await this.OpenNewFileOrFolder(files[0]);
                 }
             }
@@ -150,12 +155,80 @@ namespace ParquetViewer
 
         private void loadAllRowsButton_Click(object? sender, EventArgs? e)
         {
-            if (this._openParquetEngine is not null)
+            if (this._openParquetEngine is null)
             {
-                //Force file reload to happen instantly by triggering the event handler ourselves
-                this.recordCountTextBox.SetTextQuiet(this._openParquetEngine.RecordCount.ToString());
-                this.recordsToTextBox_TextChanged(this.recordCountTextBox, null);
-                MenuBarClickEvent.FireAndForget(MenuBarClickEvent.ActionId.LoadAllRows);
+                return;
+            }
+
+            long totalRecordCount = this._openParquetEngine.RecordCount;
+            int rowsToLoad = (int)Math.Min(totalRecordCount, MaxRowsPerLoad);
+
+            // 超过单次加载上限时先警示：千万行级别的文件一次载入会耗尽内存并让进程崩溃
+            if (totalRecordCount > MaxRowsPerLoad
+                && !this.ConfirmLoadingLargeFile(totalRecordCount, rowsToLoad))
+            {
+                return;
+            }
+
+            //Force file reload to happen instantly by triggering the event handler ourselves
+            this.recordCountTextBox.SetTextQuiet(rowsToLoad.ToString());
+            this.recordsToTextBox_TextChanged(this.recordCountTextBox, null);
+        }
+
+        /// <summary>
+        /// 询问用户是否接受“只加载前 N 行”。文件超过单次加载上限时使用。
+        /// </summary>
+        /// <param name="totalRecordCount">文件总行数</param>
+        /// <param name="rowsToLoad">准备加载的行数（已按上限截断）</param>
+        /// <returns>用户选择继续加载时返回 true</returns>
+        private bool ConfirmLoadingLargeFile(long totalRecordCount, int rowsToLoad)
+        {
+            string message = string.Format(
+                Resources.Strings.LargeFileLoadWarningMessageFormat,
+                totalRecordCount.ToString("N0"),
+                rowsToLoad.ToString("N0"));
+
+            DialogResult result = MessageBox.Show(
+                this,
+                message,
+                Resources.Strings.LargeFileLoadWarningTitle,
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            return result == DialogResult.Yes;
+        }
+
+        private void nextOffsetButton_Click(object? sender, EventArgs? e)
+        {
+            if (this._openParquetEngine is null)
+            {
+                return;
+            }
+
+            // 按当前页大小向后翻一页；先转成 long 再相加，避免偏移量和记录数都接近 int 上限时溢出
+            long nextOffset = (long)this.CurrentOffset + this.CurrentMaxRowCount;
+
+            // 已经到末尾或偏移量超出 int 可表示范围时什么都不做（正常情况下按钮此时已禁用）
+            if (nextOffset >= this._openParquetEngine.RecordCount || nextOffset > int.MaxValue)
+            {
+                return;
+            }
+
+            //Force file reload to happen instantly by triggering the event handler ourselves
+            this.offsetTextBox.SetTextQuiet(((int)nextOffset).ToString());
+            this.offsetTextBox_TextChanged(this.offsetTextBox, null);
+        }
+
+        private void nextOffsetButton_EnabledChanged(object sender, EventArgs e)
+        {
+            if (sender is Button nextOffsetRecordsButton)
+            {
+                nextOffsetRecordsButton.FlatAppearance.MouseOverBackColor = Color.Transparent;
+                nextOffsetRecordsButton.FlatAppearance.MouseDownBackColor = Color.Transparent;
+
+                nextOffsetRecordsButton.Image = nextOffsetRecordsButton.Enabled
+                    ? Resources.Icons.next_blue
+                    : Resources.Icons.next_disabled;
             }
         }
 
@@ -208,19 +281,10 @@ namespace ParquetViewer
                     return;
                 }
 
-                var stopwatch = Stopwatch.StartNew();
-                var queryEvent = new ExecuteQueryEvent
-                {
-                    RecordCountTotal = this.MainDataSource.Rows.Count,
-                    ColumnCount = this.MainDataSource.Columns.Count
-                };
-
                 try
                 {
                     this.Cursor = Cursors.WaitCursor;
                     this.MainDataSource.DefaultView.RowFilter = queryText;
-                    queryEvent.IsValid = true;
-                    queryEvent.RecordCountFiltered = this.MainDataSource.DefaultView.Count;
                 }
                 catch (Exception ex)
                 {
@@ -230,8 +294,6 @@ namespace ParquetViewer
                 finally
                 {
                     this.Cursor = Cursors.Default;
-                    queryEvent.RunTimeMS = stopwatch.ElapsedMilliseconds;
-                    var _ = queryEvent.Record(); //Fire and forget
                     this.actualShownRecordCountLabel.Text = this.MainDataSource.DefaultView.Count.ToString();
                 }
             }
@@ -362,8 +424,6 @@ namespace ParquetViewer
                     }
                 }
 
-                this._failedFileIntegrityCheckCount = 0;
-
                 void ResetTitle()
                 {
                     if (this.Text.EndsWith(fileModifiedSuffix))
@@ -372,18 +432,9 @@ namespace ParquetViewer
                         this.Text = this.Text.Replace(fileDeletedSuffix, string.Empty);
                 }
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            catch (Exception)
             {
-                //swallow expected exceptions to not overload the user with error message dialogs
-            }
-            catch (Exception ex)
-            {
-                //Swallow to not overload the user with error message dialogs but log it as this is unexpected.
-                //Also make sure we don't spam exception events for repeated failures.
-                if (++this._failedFileIntegrityCheckCount == 1)
-                {
-                    ExceptionEvent.FireAndForget(ex);
-                }
+                //忽略完整性检查中的一切异常（文件被删除、被占用等），避免反复打扰用户
             }
             finally
             {
