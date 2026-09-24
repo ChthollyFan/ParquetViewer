@@ -1,4 +1,3 @@
-using ParquetViewer.Analytics;
 using ParquetViewer.Controls;
 using ParquetViewer.Engine;
 using ParquetViewer.Engine.Exceptions;
@@ -18,6 +17,14 @@ namespace ParquetViewer
     {
         private const int DefaultOffset = 0;
         private const int DefaultRowCountValue = 1000;
+
+        /// <summary>
+        /// 单次加载行数的硬上限。
+        /// 千万行级别的文件一次性载入需要上百 GB 内存，会直接让进程 OOM 崩溃，
+        /// 因此无论从哪个入口（加载全部行按钮、记录数量输入框、总是加载全部记录设置）都不允许越过这个值。
+        /// </summary>
+        private const int MaxRowsPerLoad = 1_000_000;
+
         private readonly string DefaultFormTitle;
 
         #region Members
@@ -43,6 +50,7 @@ namespace ParquetViewer
                 this.MainDataSource?.Dispose();
                 this.MainDataSource = null;
                 this.loadAllRowsButton.Enabled = false;
+                this.nextOffsetButton.Enabled = false;
                 this.searchFilterTextBox.PlaceholderText = "WHERE ";
                 this.offsetTextBox.SetTextQuiet(DefaultOffset.ToString());
                 this.currentOffset = DefaultOffset;
@@ -114,7 +122,8 @@ namespace ParquetViewer
             get => this.currentMaxRowCount;
             set
             {
-                this.currentMaxRowCount = value;
+                // 统一在属性层做硬性截断：输入框、加载全部行按钮、总是加载全部记录设置都可能传进超大值
+                this.currentMaxRowCount = Math.Min(value, MaxRowsPerLoad);
                 LoadFileToGridview();
             }
         }
@@ -135,6 +144,11 @@ namespace ParquetViewer
                 if (this.mainDataSource is not null)
                 {
                     this.loadAllRowsButton.Enabled = this.mainDataSource.Rows.Count < (this._openParquetEngine?.RecordCount ?? default);
+
+                    // 当前偏移量再往前一页仍在文件范围内时，才还存在“下一个偏移量”可跳
+                    this.nextOffsetButton.Enabled = this._openParquetEngine is not null
+                        && (long)this.CurrentOffset + this.CurrentMaxRowCount < this._openParquetEngine.RecordCount;
+
                     SetSampleQueryAsPlaceHolder();
                 }
             }
@@ -181,12 +195,7 @@ namespace ParquetViewer
             this.RefreshDateFormatMenuItemSelection();
             this.alwaysLoadAllRecordsToolStripMenuItem.Checked = AppSettings.AlwaysLoadAllRecords;
             this.darkModeToolStripMenuItem.Checked = AppSettings.DarkMode;
-            this.RefreshExperimentalFeatureToolStrips();
             this.SetLanguageCheckmark();
-
-            //Get user's consent to gather analytics; and update the toolstrip menu item accordingly
-            Program.GetUserConsentToGatherAnalytics();
-            this.shareAnonymousUsageDataToolStripMenuItem.Checked = AppSettings.AnalyticsDataGatheringConsent;
 
             //Ask the user if they want to enable dark mode (only if their system is in dark mode)
             Program.AskUserIfTheyWantToSwitchToDarkMode();
@@ -326,7 +335,6 @@ namespace ParquetViewer
         {
             var stopwatch = Stopwatch.StartNew(); var loadTime = TimeSpan.Zero; var indexTime = TimeSpan.Zero;
             LoadingIcon? loadingIcon = null;
-            var wasSuccessful = false;
             try
             {
                 if (!this.IsAnyFileOpen)
@@ -367,7 +375,6 @@ namespace ParquetViewer
                 this.actualShownRecordCountLabel.Text = finalResult.Rows.Count.ToString();
 
                 this.MainDataSource = finalResult;
-                wasSuccessful = true;
 
                 //重新加载数据会用新的 DataTable 替换旧表导致过滤条件丢失，此处自动重新应用搜索框中的查询
                 TryApplyFilterAutomatically();
@@ -416,29 +423,6 @@ namespace ParquetViewer
                 $"Engine: {(engine is Engine.ParquetNET.ParquetEngine ? "ParquetNET" : "DuckDB")}";
 
                 loadingIcon?.Dispose();
-
-                if (wasSuccessful)
-                {
-                    var engineType = this._openParquetEngine is Engine.ParquetNET.ParquetEngine
-                        ? FileOpenEvent.ParquetEngineTypeId.ParquetNET
-                        : FileOpenEvent.ParquetEngineTypeId.DuckDB;
-
-                    FileOpenEvent.FireAndForget(
-                        Directory.Exists(this.OpenFileOrFolderPath),
-                        engine.NumberOfPartitions,
-                        engine.RecordCount,
-                        engine.Metadata.RowGroups.Count,
-                        engine.Fields.Count,
-                        this.MainDataSource!.Columns.Cast<DataColumn>().Select(column => column.DataType.Name).Distinct().Order().ToArray(),
-                        this.CurrentOffset,
-                        this.CurrentMaxRowCount,
-                        this.MainDataSource!.Columns.Count,
-                        (long)totalTime.TotalMilliseconds,
-                        (long)loadTime.TotalMilliseconds,
-                        (long)indexTime.TotalMilliseconds,
-                        (long)renderTime.TotalMilliseconds,
-                        engineType);
-                }
             }
         }
 
@@ -481,8 +465,18 @@ namespace ParquetViewer
 
             if (wasOpenSuccess && AppSettings.AlwaysLoadAllRecords)
             {
-                this.currentMaxRowCount = (int)this._openParquetEngine!.RecordCount;
-                this.recordCountTextBox.SetTextQuiet(this._openParquetEngine.RecordCount.ToString());
+                long totalRecordCount = this._openParquetEngine!.RecordCount;
+
+                // 勾选了“总是加载全部记录”的用户每次打开大文件都会走这条分支，
+                // 同样要先警示并截断到上限，否则照样会把程序卡死
+                int rowsToLoad = (int)Math.Min(totalRecordCount, MaxRowsPerLoad);
+                if (totalRecordCount > MaxRowsPerLoad && !this.ConfirmLoadingLargeFile(totalRecordCount, rowsToLoad))
+                {
+                    rowsToLoad = DefaultRowCount;
+                }
+
+                this.currentMaxRowCount = rowsToLoad;
+                this.recordCountTextBox.SetTextQuiet(rowsToLoad.ToString());
             }
             else
             {

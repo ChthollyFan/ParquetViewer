@@ -119,7 +119,7 @@
   </resheader>
   <assembly alias="mscorlib" name="mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
   <data name="mainTableLayoutPanel.ColumnCount" type="System.Int32, mscorlib">
-    <value>11</value>
+    <value>12</value>
   </data>
   <assembly alias="System.Windows.Forms" name="System.Windows.Forms, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
   <data name="recordsToLabel.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
@@ -512,6 +512,48 @@
   <data name="&gt;&gt;loadAllRowsButton.ZOrder" xml:space="preserve">
     <value>9</value>
   </data>
+  <data name="nextOffsetButton.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Left, Right</value>
+  </data>
+  <data name="nextOffsetButton.BackgroundImageLayout" type="System.Windows.Forms.ImageLayout, System.Windows.Forms">
+    <value>Center</value>
+  </data>
+  <data name="nextOffsetButton.Enabled" type="System.Boolean, mscorlib">
+    <value>False</value>
+  </data>
+  <data name="nextOffsetButton.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="nextOffsetButton.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Segoe UI, 8.25pt</value>
+  </data>
+  <data name="nextOffsetButton.Location" type="System.Drawing.Point, System.Drawing">
+    <value>946, 9</value>
+  </data>
+  <data name="nextOffsetButton.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>2, 0, 5, 0</value>
+  </data>
+  <data name="nextOffsetButton.Size" type="System.Drawing.Size, System.Drawing">
+    <value>13, 16</value>
+  </data>
+  <data name="nextOffsetButton.TabIndex" type="System.Int32, mscorlib">
+    <value>9</value>
+  </data>
+  <data name="nextOffsetButton.ToolTip" xml:space="preserve">
+    <value>Jump to the next offset</value>
+  </data>
+  <data name="&gt;&gt;nextOffsetButton.Name" xml:space="preserve">
+    <value>nextOffsetButton</value>
+  </data>
+  <data name="&gt;&gt;nextOffsetButton.Type" xml:space="preserve">
+    <value>System.Windows.Forms.Button, System.Windows.Forms, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="&gt;&gt;nextOffsetButton.Parent" xml:space="preserve">
+    <value>mainTableLayoutPanel</value>
+  </data>
+  <data name="&gt;&gt;nextOffsetButton.ZOrder" xml:space="preserve">
+    <value>10</value>
+  </data>
   <data name="mainTableLayoutPanel.Dock" type="System.Windows.Forms.DockStyle, System.Windows.Forms">
     <value>Fill</value>
   </data>
@@ -543,7 +585,7 @@
     <value>1</value>
   </data>
   <data name="mainTableLayoutPanel.LayoutSettings" type="System.Windows.Forms.TableLayoutSettings, System.Windows.Forms">
-    <value>&lt;?xml version="1.0" encoding="utf-16"?&gt;&lt;TableLayoutSettings&gt;&lt;Controls&gt;&lt;Control Name="recordsToLabel" Row="0" RowSpan="1" Column="8" ColumnSpan="1" /&gt;&lt;Control Name="recordCountTextBox" Row="0" RowSpan="1" Column="9" ColumnSpan="1" /&gt;&lt;Control Name="showRecordsFromLabel" Row="0" RowSpan="1" Column="6" ColumnSpan="1" /&gt;&lt;Control Name="offsetTextBox" Row="0" RowSpan="1" Column="7" ColumnSpan="1" /&gt;&lt;Control Name="runQueryButton" Row="0" RowSpan="1" Column="4" ColumnSpan="1" /&gt;&lt;Control Name="searchFilterLabel" Row="0" RowSpan="1" Column="0" ColumnSpan="2" /&gt;&lt;Control Name="searchFilterTextBox" Row="0" RowSpan="1" Column="2" ColumnSpan="2" /&gt;&lt;Control Name="clearFilterButton" Row="0" RowSpan="1" Column="5" ColumnSpan="1" /&gt;&lt;Control Name="mainGridView" Row="1" RowSpan="2" Column="0" ColumnSpan="11" /&gt;&lt;Control Name="loadAllRowsButton" Row="0" RowSpan="1" Column="10" ColumnSpan="1" /&gt;&lt;/Controls&gt;&lt;Columns Styles="Absolute,74,Absolute,35,Absolute,93,Percent,100,Absolute,117,Absolute,93,Absolute,58,Absolute,70,Absolute,58,Absolute,70,Absolute,20" /&gt;&lt;Rows Styles="Absolute,35,Absolute,35,Percent,100,Absolute,23" /&gt;&lt;/TableLayoutSettings&gt;</value>
+    <value>&lt;?xml version="1.0" encoding="utf-16"?&gt;&lt;TableLayoutSettings&gt;&lt;Controls&gt;&lt;Control Name="recordsToLabel" Row="0" RowSpan="1" Column="8" ColumnSpan="1" /&gt;&lt;Control Name="recordCountTextBox" Row="0" RowSpan="1" Column="9" ColumnSpan="1" /&gt;&lt;Control Name="showRecordsFromLabel" Row="0" RowSpan="1" Column="6" ColumnSpan="1" /&gt;&lt;Control Name="offsetTextBox" Row="0" RowSpan="1" Column="7" ColumnSpan="1" /&gt;&lt;Control Name="runQueryButton" Row="0" RowSpan="1" Column="4" ColumnSpan="1" /&gt;&lt;Control Name="searchFilterLabel" Row="0" RowSpan="1" Column="0" ColumnSpan="2" /&gt;&lt;Control Name="searchFilterTextBox" Row="0" RowSpan="1" Column="2" ColumnSpan="2" /&gt;&lt;Control Name="clearFilterButton" Row="0" RowSpan="1" Column="5" ColumnSpan="1" /&gt;&lt;Control Name="mainGridView" Row="1" RowSpan="2" Column="0" ColumnSpan="12" /&gt;&lt;Control Name="loadAllRowsButton" Row="0" RowSpan="1" Column="10" ColumnSpan="1" /&gt;&lt;Control Name="nextOffsetButton" Row="0" RowSpan="1" Column="11" ColumnSpan="1" /&gt;&lt;/Controls&gt;&lt;Columns Styles="Absolute,74,Absolute,35,Absolute,93,Percent,100,Absolute,117,Absolute,93,Absolute,58,Absolute,70,Absolute,58,Absolute,70,Absolute,20,Absolute,20" /&gt;&lt;Rows Styles="Absolute,35,Absolute,35,Percent,100,Absolute,23" /&gt;&lt;/TableLayoutSettings&gt;</value>
   </data>
   <metadata name="openParquetFileDialog.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
     <value>208, 17</value>
@@ -809,15 +851,6 @@
   </data>
   <data name="userGuideToolStripMenuItem.Text" xml:space="preserve">
     <value>User Guide</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.Size" type="System.Drawing.Size, System.Drawing">
-    <value>165, 22</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.Text" xml:space="preserve">
-    <value>Share Usage Data</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.ToolTipText" xml:space="preserve">
-    <value>See About page for link to privacy policy</value>
   </data>
   <data name="englishToolStripMenuItem.Size" type="System.Drawing.Size, System.Drawing">
     <value>112, 22</value>
@@ -1132,12 +1165,6 @@
     <value>userGuideToolStripMenuItem</value>
   </data>
   <data name="&gt;&gt;userGuideToolStripMenuItem.Type" xml:space="preserve">
-    <value>System.Windows.Forms.ToolStripMenuItem, System.Windows.Forms, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;shareAnonymousUsageDataToolStripMenuItem.Name" xml:space="preserve">
-    <value>shareAnonymousUsageDataToolStripMenuItem</value>
-  </data>
-  <data name="&gt;&gt;shareAnonymousUsageDataToolStripMenuItem.Type" xml:space="preserve">
     <value>System.Windows.Forms.ToolStripMenuItem, System.Windows.Forms, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
   <data name="&gt;&gt;languageToolStripMenuItem.Name" xml:space="preserve">

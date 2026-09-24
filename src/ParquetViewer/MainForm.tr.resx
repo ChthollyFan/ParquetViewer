@@ -209,6 +209,9 @@
   <data name="loadAllRowsButton.ToolTip" xml:space="preserve">
     <value>Tüm kayıtları yükle (Ctrl+E)</value>
   </data>
+  <data name="nextOffsetButton.ToolTip" xml:space="preserve">
+    <value>Sonraki ofsete atla (geçerli kayıt sayısı kadar ileri gider)</value>
+  </data>
   <data name="mainTableLayoutPanel.ToolTip" xml:space="preserve">
     <value />
   </data>
@@ -431,15 +434,6 @@
   </data>
   <data name="userGuideToolStripMenuItem.Text" xml:space="preserve">
     <value>Kullanıcı Kılavuzu</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.Size" type="System.Drawing.Size, System.Drawing">
-    <value>187, 22</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.Text" xml:space="preserve">
-    <value>Kullanım Verisi Paylaş</value>
-  </data>
-  <data name="shareAnonymousUsageDataToolStripMenuItem.ToolTipText" xml:space="preserve">
-    <value>Gizlilik politikası için Hakkında sayfasına bakınız</value>
   </data>
   <data name="languageToolStripMenuItem.Size" type="System.Drawing.Size, System.Drawing">
     <value>187, 22</value>

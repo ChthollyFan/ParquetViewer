@@ -47,6 +47,7 @@ namespace ParquetViewer
             clearFilterButton = new Button();
             mainGridView = new ParquetGridView();
             loadAllRowsButton = new Button();
+            nextOffsetButton = new Button();
             openParquetFileDialog = new OpenFileDialog();
             mainMenuStrip = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
@@ -70,7 +71,6 @@ namespace ParquetViewer
             metadataViewerToolStripMenuItem = new ToolStripMenuItem();
             helpToolStripMenuItem = new ToolStripMenuItem();
             userGuideToolStripMenuItem = new ToolStripMenuItem();
-            shareAnonymousUsageDataToolStripMenuItem = new ToolStripMenuItem();
             languageToolStripMenuItem = new ToolStripMenuItem();
             englishToolStripMenuItem = new ToolStripMenuItem();
             turkishToolStripMenuItem = new ToolStripMenuItem();
@@ -108,6 +108,7 @@ namespace ParquetViewer
             mainTableLayoutPanel.Controls.Add(clearFilterButton, 5, 0);
             mainTableLayoutPanel.Controls.Add(mainGridView, 0, 1);
             mainTableLayoutPanel.Controls.Add(loadAllRowsButton, 10, 0);
+            mainTableLayoutPanel.Controls.Add(nextOffsetButton, 11, 0);
             mainTableLayoutPanel.Name = "mainTableLayoutPanel";
             // 
             // recordsToLabel
@@ -189,7 +190,7 @@ namespace ParquetViewer
             mainGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
             mainGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             mainGridView.ColumnNameEscapeFormat = "[{0}]";
-            mainTableLayoutPanel.SetColumnSpan(mainGridView, 11);
+            mainTableLayoutPanel.SetColumnSpan(mainGridView, 12);
             mainGridView.CopyAsWhereIcon = (System.Drawing.Image)resources.GetObject("mainGridView.CopyAsWhereIcon");
             mainGridView.CopyToClipboardIcon = (System.Drawing.Image)resources.GetObject("mainGridView.CopyToClipboardIcon");
             mainGridView.DateValueEscapeFormat = "#{0}#";
@@ -213,6 +214,19 @@ namespace ParquetViewer
             loadAllRowsButton.UseVisualStyleBackColor = true;
             loadAllRowsButton.EnabledChanged += loadAllRowsButton_EnabledChanged;
             loadAllRowsButton.Click += loadAllRowsButton_Click;
+            // 
+            // nextOffsetButton
+            // 
+            resources.ApplyResources(nextOffsetButton, "nextOffsetButton");
+            nextOffsetButton.Cursor = Cursors.Hand;
+            nextOffsetButton.FlatAppearance.BorderSize = 0;
+            nextOffsetButton.FlatAppearance.MouseOverBackColor = System.Drawing.SystemColors.Control;
+            nextOffsetButton.Image = Resources.Icons.next_blue;
+            nextOffsetButton.Name = "nextOffsetButton";
+            loadAllRowsButtonTooltip.SetToolTip(nextOffsetButton, resources.GetString("nextOffsetButton.ToolTip"));
+            nextOffsetButton.UseVisualStyleBackColor = true;
+            nextOffsetButton.EnabledChanged += nextOffsetButton_EnabledChanged;
+            nextOffsetButton.Click += nextOffsetButton_Click;
             // 
             // openParquetFileDialog
             // 
@@ -345,7 +359,7 @@ namespace ParquetViewer
             // 
             // helpToolStripMenuItem
             // 
-            helpToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { userGuideToolStripMenuItem, shareAnonymousUsageDataToolStripMenuItem, languageToolStripMenuItem, aboutToolStripMenuItem });
+            helpToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { userGuideToolStripMenuItem, languageToolStripMenuItem, aboutToolStripMenuItem });
             helpToolStripMenuItem.Name = "helpToolStripMenuItem";
             resources.ApplyResources(helpToolStripMenuItem, "helpToolStripMenuItem");
             // 
@@ -355,13 +369,6 @@ namespace ParquetViewer
             userGuideToolStripMenuItem.Name = "userGuideToolStripMenuItem";
             resources.ApplyResources(userGuideToolStripMenuItem, "userGuideToolStripMenuItem");
             userGuideToolStripMenuItem.Click += userGuideToolStripMenuItem_Click;
-            // 
-            // shareAnonymousUsageDataToolStripMenuItem
-            // 
-            shareAnonymousUsageDataToolStripMenuItem.Name = "shareAnonymousUsageDataToolStripMenuItem";
-            resources.ApplyResources(shareAnonymousUsageDataToolStripMenuItem, "shareAnonymousUsageDataToolStripMenuItem");
-            shareAnonymousUsageDataToolStripMenuItem.CheckedChanged += shareAnonymousUsageDataToolStripMenuItem_CheckedChanged;
-            shareAnonymousUsageDataToolStripMenuItem.Click += shareAnonymousUsageDataToolStripMenuItem_Click;
             // 
             // languageToolStripMenuItem
             // 
@@ -536,8 +543,8 @@ namespace ParquetViewer
         private System.Windows.Forms.ToolStripMenuItem alwaysLoadAllRecordsToolStripMenuItem;
         private System.Windows.Forms.FolderBrowserDialog openFolderDialog;
         private System.Windows.Forms.ToolStripMenuItem openFolderToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem shareAnonymousUsageDataToolStripMenuItem;
         private System.Windows.Forms.Button loadAllRowsButton;
+        private System.Windows.Forms.Button nextOffsetButton;
         private ToolTip loadAllRowsButtonTooltip;
         private ToolStripMenuItem customDateFormatToolStripMenuItem;
         private ToolStripMenuItem darkModeToolStripMenuItem;

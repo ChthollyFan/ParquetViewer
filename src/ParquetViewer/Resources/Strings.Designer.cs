@@ -61,26 +61,6 @@ namespace ParquetViewer.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Would you like to share anonymous usage data to help make ParquetViewer better?
-        ///
-        ///You can always change this setting later from the Help menu..
-        /// </summary>
-        internal static string AnalyticsConsentPromptMessage {
-            get {
-                return ResourceManager.GetString("AnalyticsConsentPromptMessage", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Share Anonymous Usage Data?.
-        /// </summary>
-        internal static string AnalyticsConsentPromptTitle {
-            get {
-                return ResourceManager.GetString("AnalyticsConsentPromptTitle", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to Unfortunately byte[] types are currently unsupported in query results. Values will be shown as null..
         /// </summary>
         internal static string ByteArraysNotSupportedErrorMessage {
@@ -420,6 +400,24 @@ namespace ParquetViewer.Resources {
         internal static string LanguageChangeConfirmationTitle {
             get {
                 return ResourceManager.GetString("LanguageChangeConfirmationTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to This file has {0} rows, which is over the {1} row limit for a single load.
+        /// </summary>
+        internal static string LargeFileLoadWarningMessageFormat {
+            get {
+                return ResourceManager.GetString("LargeFileLoadWarningMessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Large file.
+        /// </summary>
+        internal static string LargeFileLoadWarningTitle {
+            get {
+                return ResourceManager.GetString("LargeFileLoadWarningTitle", resourceCulture);
             }
         }
         

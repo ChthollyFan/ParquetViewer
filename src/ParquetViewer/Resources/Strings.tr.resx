@@ -117,6 +117,12 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="LargeFileLoadWarningMessageFormat" xml:space="preserve">
+    <value>Bu dosya {0} satır içeriyor ve tek seferlik {1} satır sınırını aşıyor.&#xA;&#xA;Bu kadar satırı tek seferde yüklemek belleği tüketip uygulamayı çökertebilir.&#xA;&#xA;Bunun yerine ilk {1} satır yüklensin mi?</value>
+  </data>
+  <data name="LargeFileLoadWarningTitle" xml:space="preserve">
+    <value>Büyük dosya</value>
+  </data>
   <data name="LoadedRecordCountRangeFormat" xml:space="preserve">
     <value>{0} - {1}</value>
   </data>
@@ -271,14 +277,6 @@ Onun yerine sonuçlari {2} dosyasına aktarmak ister misiniz?</value>
   </data>
   <data name="DotNetDateFormatHelpUrl" xml:space="preserve">
     <value>https://docs.microsoft.com/tr-tr/dotnet/standard/base-types/custom-date-and-time-format-strings</value>
-  </data>
-  <data name="AnalyticsConsentPromptMessage" xml:space="preserve">
-    <value>Anonim kullanım istatistikleri paylaşarak ParquetViewer'a destek olmak ister miydiniz?
-
-Tercihinizi Yardım menüsunden her zaman değiştirebilirsiniz.</value>
-  </data>
-  <data name="AnalyticsConsentPromptTitle" xml:space="preserve">
-    <value>Anonim Kullanım Verisi Toplansın mı?</value>
   </data>
   <data name="FileExtensionAssociationPromptMessageFormat" xml:space="preserve">
     <value>ParquetViewer'ı .parquet dosyaları için varsayılan uygulama olarak ilişkilendirmek ister miydiniz?
