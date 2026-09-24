@@ -136,14 +136,6 @@ wiki_images/                        # 文档用截图
 docs/                               # 中文文档（Wiki 中文版）
 ```
 
-## 使用统计（Analytics）
-
-用户可选择加入匿名使用数据分享，以帮助改进应用。[^1]
-
-可查看 [ParquetViewer Analytics Dashboard](https://app.amplitude.com/analytics/share/7207c0b64c154e979afd7082980d6dd6) 了解整体使用情况。
-
-[^1]: 完整隐私政策：https://github.com/ChthollyFan/ParquetViewer/wiki/Privacy-Policy
-
 ## 贡献
 
 - 欢迎提交 Issue 报告问题或功能建议

@@ -1,121 +1,13 @@
-﻿using ParquetViewer.Analytics;
-using ParquetViewer.Controls;
+﻿using ParquetViewer.Controls;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Helpers;
-using RichardSzalay.MockHttp;
 using System.Globalization;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 
 namespace ParquetViewer.Tests
 {
     [TestClass]
     public class HelperTests
     {
-        [TestMethod]
-        public async Task AMPLITUDE_EVENT_TEST()
-        {
-            var testEvent = TestAmplitudeEvent.MockRequest(out var mockHttpHandler);
-            testEvent.IgnoredProperty = "xxx";
-            testEvent.RegularProperty = "yyy";
-
-            var isSelfContainedExecutable = false;
-#if RELEASE_SELFCONTAINED
-            isSelfContainedExecutable = true;
-#endif
-
-            string expectedRequestJson = @$"
-{{
-    ""api_key"": ""dummy"",
-    ""events"": [{{
-        ""device_id"": ""{AppSettings.AnalyticsDeviceId}"",
-        ""event_type"": ""{TestAmplitudeEvent.EVENT_TYPE}"",
-        ""user_properties"": {{
-            ""alwaysLoadAllRecords"": {AppSettings.AlwaysLoadAllRecords.ToString().ToLower()},
-            ""alwaysSelectAllFields"": {AppSettings.AlwaysSelectAllFields.ToString().ToLower()},
-            ""dateTimeDisplayFormat"": ""{AppSettings.DateTimeDisplayFormat}"",
-            ""systemMemory"": {(int)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1048576.0 /*magic number*/)},
-            ""processorCount"": {Environment.ProcessorCount},
-            ""isDefaultParquetViewer"": {AboutBox.IsDefaultViewerForParquetFiles.ToString().ToLower()},
-            ""darkMode"": {AppSettings.DarkMode.ToString().ToLower()},
-            ""cultureInfo"": ""{AppSettings.UserSelectedCulture ?? CultureInfo.CurrentUICulture}"",
-            ""selfContainedExecutable"": {(isSelfContainedExecutable ? "true" : "false")}
-        }},
-        ""event_properties"": {{
-            ""regularProperty"": ""yyy""
-        }},
-        ""session_id"": {testEvent.SessionId},
-        ""language"": ""{CultureInfo.CurrentUICulture.Name}"",
-        ""os_name"": ""{Environment.OSVersion.Platform}"",
-        ""os_version"": ""{Environment.OSVersion.VersionString}"",
-        ""app_version"": ""{Helpers.Env.AssemblyVersion.ToString()}""
-    }}]
-}}";
-
-            //mock the http response
-            _ = mockHttpHandler.Expect(HttpMethod.Post, "*").Respond(async (request) =>
-            {
-                string requestJsonBody = await (request.Content?.ReadAsStringAsync() ?? Task.FromResult(string.Empty));
-                if (Regex.Replace(requestJsonBody, "\\s", string.Empty)
-                    .Equals(Regex.Replace(expectedRequestJson, "\\s", string.Empty)))
-                    return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
-                else
-                    return new HttpResponseMessage(System.Net.HttpStatusCode.BadRequest);
-            });
-
-            bool wasSuccess = await testEvent.Record();
-            Assert.IsTrue(wasSuccess, "The event json we would have sent to Amplitude didn't match the expected value");
-        }
-
-        [TestMethod]
-        public async Task AMPLITUDE_EXCEPTION_SENSITIVE_TEXT_MASKING_TEST()
-        {
-            var testAmplitudeEvent = TestAmplitudeEvent.MockRequest(out var mockHttpHandler);
-            var testEvent = new ExceptionEvent(new Exception("Exception with `sensitive` data"), testAmplitudeEvent.CloneAmplitudeConfiguration());
-
-            //mock the http response
-            _ = mockHttpHandler.Expect(HttpMethod.Post, "*").Respond(async (request) =>
-            {
-                string requestJsonBody = await (request.Content?.ReadAsStringAsync() ?? Task.FromResult(string.Empty));
-
-                if (requestJsonBody.Contains($"Exception with {ExceptionEvent.MASK_SENTINEL} data"))
-                    return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
-                else
-                    return new HttpResponseMessage(System.Net.HttpStatusCode.BadRequest);
-            });
-
-            bool wasSuccess = await testEvent.Record();
-            Assert.IsTrue(wasSuccess, "Sensitive data wasn't stripped out correctly");
-        }
-
-        [TestMethod]
-        public async Task AMPLITUDE_EXCEPTION_ADDITIONAL_DATA_IS_SERIALIZED_TEST()
-        {
-            var testAmplitudeEvent = TestAmplitudeEvent.MockRequest(out var mockHttpHandler);
-
-            var testException = new Exception("Exception with additional data");
-            testException.Data["key1"] = "value1";
-            testException.Data["key2"] = "value2";
-            var testEvent = new ExceptionEvent(testException, testAmplitudeEvent.CloneAmplitudeConfiguration());
-
-            //mock the http response
-            _ = mockHttpHandler.Expect(HttpMethod.Post, "*").Respond(async (request) =>
-            {
-                string requestJsonBody = await (request.Content?.ReadAsStringAsync() ?? Task.FromResult(string.Empty));
-
-                var requestJson = JsonNode.Parse(requestJsonBody);
-                if (requestJson?["events"]?[0]?["event_properties"]?["key1"]?.GetValue<string>() == "value1"
-                    && requestJson?["events"]?[0]?["event_properties"]?["key2"]?.GetValue<string>() == "value2"
-                    && requestJson?["events"]?[0]?["event_properties"]?["message"]?.GetValue<string>() == "Exception with additional data")
-                    return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
-                else
-                    return new HttpResponseMessage(System.Net.HttpStatusCode.BadRequest);
-            });
-
-            bool wasSuccess = await testEvent.Record();
-            Assert.IsTrue(wasSuccess, "Additional exception data wasn't added to the amplitude event as expected");
-        }
-
         [TestMethod]
         [DataRow("1.0", null)]
         [DataRow("1.0.0", "1.0.0")]

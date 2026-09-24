@@ -1,5 +1,4 @@
 ﻿using MiniExcelLibs;
-using ParquetViewer.Analytics;
 using ParquetViewer.Engine;
 using ParquetViewer.Engine.Exceptions;
 using ParquetViewer.Exceptions;
@@ -7,7 +6,6 @@ using ParquetViewer.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -71,7 +69,6 @@ namespace ParquetViewer
                         if (selectedFileType is null)
                             throw new ArgumentOutOfRangeException(fileExtension);
 
-                        var stopWatch = Stopwatch.StartNew();
                         loadingIcon = this.ShowLoadingIcon(Resources.Strings.ExportingDataLabelText, this.MainDataSource.DefaultView.Count * this.MainDataSource.Columns.Count);
                         await ExportResultsImpl(this.MainDataSource!, selectedFileType.Value, this._openParquetEngine,
                             filePath, loadingIcon.CancellationToken, loadingIcon, this.OpenFileOrFolderPath);
@@ -84,13 +81,6 @@ namespace ParquetViewer
                         else
                         {
                             long fileSizeInBytes = new FileInfo(filePath).Length;
-
-                            FileExportEvent.FireAndForget(
-                                selectedFileType.Value,
-                                fileSizeInBytes,
-                                this.mainGridView.RowCount,
-                                this.mainGridView.ColumnCount,
-                                stopWatch.ElapsedMilliseconds);
 
                             MessageBox.Show(this,
                                 Resources.Strings.ExportSuccessfulMessageFormat.Format(Math.Round((fileSizeInBytes / 1024.0) / 1024.0, 2)),

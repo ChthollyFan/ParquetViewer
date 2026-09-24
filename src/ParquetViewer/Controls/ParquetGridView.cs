@@ -1,5 +1,4 @@
-﻿using ParquetViewer.Analytics;
-using ParquetViewer.Engine;
+﻿using ParquetViewer.Engine;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Helpers;
 using System;
@@ -299,7 +298,7 @@ namespace ParquetViewer.Controls
                     {
                         var uniqueCellTag = Guid.NewGuid();
                         var quickPeekForm = new QuickPeekForm(this.Columns[columnIndex].Name, image, uniqueCellTag, rowIndex, columnIndex);
-                        ShowQuickPeekForm(quickPeekForm, this[columnIndex, rowIndex], uniqueCellTag, QuickPeekEvent.DataTypeId.Image);
+                        ShowQuickPeekForm(quickPeekForm, this[columnIndex, rowIndex], uniqueCellTag);
                     }
                 }
             }
@@ -353,13 +352,10 @@ namespace ParquetViewer.Controls
                 return;
             }
 
-            var dataType = QuickPeekEvent.DataTypeId.Unknown;
             QuickPeekForm? quickPeekForm = null;
             var uniqueCellTag = Guid.NewGuid();
             if (clickedCell.Value is IListValue listValue)
             {
-                dataType = QuickPeekEvent.DataTypeId.List;
-
                 var dt = new DataTable();
                 dt.Columns.Add(new DataColumn(this.Columns[e.ColumnIndex].Name, listValue.Type!));
 
@@ -374,8 +370,6 @@ namespace ParquetViewer.Controls
             }
             else if (clickedCell.Value is IMapValue mapValue)
             {
-                dataType = QuickPeekEvent.DataTypeId.Map;
-
                 var dt = new DataTable();
                 dt.Columns.Add(new DataColumn($"key", mapValue.KeyType));
                 dt.Columns.Add(new DataColumn($"value", mapValue.ValueType));
@@ -392,14 +386,11 @@ namespace ParquetViewer.Controls
             }
             else if (clickedCell.Value is IStructValue structValue)
             {
-                dataType = QuickPeekEvent.DataTypeId.Struct;
-
                 var dt = structValue.ToDataTable();
                 quickPeekForm = new QuickPeekForm(this.Columns[e.ColumnIndex].Name, dt, uniqueCellTag, e.RowIndex, e.ColumnIndex);
             }
             else if (clickedCell.Value is IByteArrayValue byteArray && byteArray.ToImage(out var image))
             {
-                dataType = QuickPeekEvent.DataTypeId.Image;
                 quickPeekForm = new QuickPeekForm(this.Columns[e.ColumnIndex].Name, image!, uniqueCellTag, e.RowIndex, e.ColumnIndex);
             }
             else
@@ -408,11 +399,11 @@ namespace ParquetViewer.Controls
                 return;
             }
 
-            ShowQuickPeekForm(quickPeekForm, clickedCell, uniqueCellTag, dataType);
+            ShowQuickPeekForm(quickPeekForm, clickedCell, uniqueCellTag);
         }
 
         private void ShowQuickPeekForm(QuickPeekForm quickPeekForm, DataGridViewCell clickedCell,
-            Guid uniqueCellTag, QuickPeekEvent.DataTypeId dataType)
+            Guid uniqueCellTag)
         {
             clickedCell.Tag = uniqueCellTag;
 
@@ -463,7 +454,6 @@ namespace ParquetViewer.Controls
             openQuickPeekForms.Remove((clickedCell.RowIndex, clickedCell.ColumnIndex)); //Remove any leftover value if the user navigated the file
             openQuickPeekForms.Add((clickedCell.RowIndex, clickedCell.ColumnIndex), quickPeekForm);
             quickPeekForm.Show(this.Parent ?? this);
-            QuickPeekEvent.FireAndForget(dataType);
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
@@ -872,7 +862,7 @@ namespace ParquetViewer.Controls
             try
             {
                 var clipboardContent = this.GetClipboardContent();
-                if (clipboardContent is not null) //Not sure why it would ever be null but saw some exceptions in Amplitude so added this check here to be safe.
+                if (clipboardContent is not null) //防御性判空：实际运行中遇到过此处为 null 的情况，保留检查避免异常
                     Clipboard.SetDataObject(clipboardContent, true, 2, 250); //Without setting `copy` to true, this call can cause a UI thread deadlock somehow...
             }
             catch (ExternalException ex) //This can happen if the user spams CTRL+C
@@ -1140,7 +1130,6 @@ namespace ParquetViewer.Controls
                     var toolstripMenuItem = new ToolStripMenuItem(supportedFormat.ToString());
                     toolstripMenuItem.Click += (object? _, EventArgs _) =>
                     {
-                        ColumnFormattedEvent.FireAndForget(toolstripMenuItem.Text);
                         if (byteArrayColumnsWithFormatOverrides.ContainsKey(columnName))
                             byteArrayColumnsWithFormatOverrides[columnName] = supportedFormat;
                         else
@@ -1173,8 +1162,6 @@ namespace ParquetViewer.Controls
                 { Checked = displayFormat == FloatDisplayFormat.Scientific };
                 scientificNotationMenuItem.Click += (object? _, EventArgs _) =>
                 {
-                    ColumnFormattedEvent.FireAndForget("Scientific");
-
                     if (floatColumnsWithFormatOverrides.ContainsKey(columnName))
                         floatColumnsWithFormatOverrides[columnName] = FloatDisplayFormat.Scientific;
                     else
@@ -1189,8 +1176,6 @@ namespace ParquetViewer.Controls
                 { Checked = displayFormat == FloatDisplayFormat.Decimal };
                 decimalNotationMenuItem.Click += (object? _, EventArgs _) =>
                 {
-                    ColumnFormattedEvent.FireAndForget("Decimal");
-
                     if (floatColumnsWithFormatOverrides.ContainsKey(columnName))
                         floatColumnsWithFormatOverrides[columnName] = FloatDisplayFormat.Decimal;
                     else
@@ -1257,9 +1242,6 @@ namespace ParquetViewer.Controls
             menuItem.Click += (object? _, EventArgs _) =>
             {
                 var isWordWrapCurrentlyEnabled = column.DefaultCellStyle.WrapMode == DataGridViewTriState.True;
-
-                if (!isWordWrapCurrentlyEnabled)
-                    ColumnFormattedEvent.FireAndForget("WordWrap");
 
                 column.DefaultCellStyle.WrapMode = isWordWrapCurrentlyEnabled ? DataGridViewTriState.False : DataGridViewTriState.True;
 

@@ -23,12 +23,5 @@ Releases can be found here: https://github.com/ChthollyFan/ParquetViewer/release
 
 Details on how to use the utility can be found in [the Wiki](https://github.com/ChthollyFan/ParquetViewer/wiki)
 
-# Analytics
-Users can opt-in to share anonymous usage data to help make the app better. [^1]
-
-Checkout the [ParquetViewer Analytics Dashboard](https://app.amplitude.com/analytics/share/7207c0b64c154e979afd7082980d6dd6) if you're interested!
-
-[^1]: Full privacy policy here: https://github.com/ChthollyFan/ParquetViewer/wiki/Privacy-Policy
-
 # Sponsors
 Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a>

@@ -1,5 +1,4 @@
 ﻿using DotnetFileAssociator;
-using ParquetViewer.Analytics;
 using ParquetViewer.Controls;
 using ParquetViewer.Helpers;
 using System;
@@ -43,12 +42,6 @@ namespace ParquetViewer
             this.labelCopyright.Text = AssemblyCopyright;
             this.textBoxDescription.Text = AssemblyDescription.Replace($"Privacy policy:", $"{Resources.Strings.PrivacyPolicyLabelText}:"); //HACK: to translate privacy policy text
             this.newVersionLabel.Image = null;
-
-            if (!AmplitudeEvent.HasApiKey)
-            {
-                this.textBoxDescription.Text = $"No Amplitude API Key!{Environment.NewLine}{Environment.NewLine}"
-                    + this.textBoxDescription.Text;
-            }
         }
 
         #region Assembly Attribute Accessors
@@ -215,9 +208,9 @@ namespace ParquetViewer
                     this.newVersionLabel.Enabled = false;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ExceptionEvent.FireAndForget(ex);
+                //本仓库已移除匿名遥测，此处只重置"最新版本"链接的显示状态
                 this.newVersionLabel.Text = string.Empty;
                 this.newVersionLabel.Tag = null;
                 this.newVersionLabel.Enabled = false;
