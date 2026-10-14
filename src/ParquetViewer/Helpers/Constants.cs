@@ -48,6 +48,8 @@ namespace ParquetViewer.Helpers
         #region Latest Release Version
         //"最新版本"指的是本应用的发布版本，因此只能查询本仓库的 releases，查询上游仓库会返回与本应用无关的旧版本号
         private const string RELEASES_API_URL = "https://api.github.com/repos/ChthollyFan/ParquetViewer/releases";
+        //GitHub 接口偶尔不返回 html_url，这里按 tag 拼出发布页面地址兜底，保证"更新"按钮始终能跳转
+        private const string RELEASE_PAGE_URL_FORMAT = "https://github.com/ChthollyFan/ParquetViewer/releases/tag/v{0}";
         private static SemanticVersion? _latestReleaseVersion = null;
         private static Uri? _releaseUri = null;
         private static DateTime? _latestReleaseLastCheckedOn = null;
@@ -76,6 +78,13 @@ namespace ParquetViewer.Helpers
                     using var responseJson = JsonDocument.Parse(response.Content.ReadAsStream());
                     foreach (var release in responseJson.RootElement.EnumerateArray())
                     {
+                        //CI 会为 PR 创建预发布 Release，它不代表用户可以升级到的正式版本，跳过以免误导用户
+                        if (release.TryGetProperty("prerelease", out var prerelease)
+                            && prerelease.ValueKind == JsonValueKind.True)
+                        {
+                            continue;
+                        }
+
                         Uri? releaseUri = null;
                         if (release.TryGetProperty("html_url", out var releaseUrl)
                             && releaseUrl.GetString() is string url)
@@ -87,13 +96,13 @@ namespace ParquetViewer.Helpers
                             && releaseTag.GetString() is string tag
                             && SemanticVersion.TryParse(tag, out var semanticVersion))
                         {
-                            _releaseUri = releaseUri;
+                            //接口未返回 html_url 时用 tag 兜底，避免用户点击"更新"却没有可跳转的地址
+                            _releaseUri = releaseUri ?? new Uri(string.Format(RELEASE_PAGE_URL_FORMAT, semanticVersion));
                             _latestReleaseVersion = semanticVersion;
-                            return (semanticVersion, releaseUri);
+                            return (semanticVersion, _releaseUri);
                         }
 
-                        //We only care about the latest release so stop processing now
-                        break;
+                        //该条目不是可解析的正式版本，继续检查下一条（原实现直接中断，会漏掉后面的正式版本）
                     }
                 }
             }

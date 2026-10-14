@@ -245,6 +245,9 @@ namespace ParquetViewer
 
             //Ask the user if they want to enable dark mode (only if their system is in dark mode)
             Program.AskUserIfTheyWantToSwitchToDarkMode();
+
+            //检查本仓库是否有新的正式版本，有则询问用户是否前往发布页面更新
+            await Program.AskUserIfTheyWantToUpdateAsync(this);
         }
 
         private async Task<List<string>?> OpenFieldSelectionDialog(bool forceOpenDialog)

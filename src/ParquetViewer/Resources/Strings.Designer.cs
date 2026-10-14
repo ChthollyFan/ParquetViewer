@@ -666,6 +666,52 @@ namespace ParquetViewer.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to 取消.
+        /// </summary>
+        internal static string UpdateAvailableDialogCancelButtonText {
+            get {
+                return ResourceManager.GetString("UpdateAvailableDialogCancelButtonText", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to 发现新版本 v{0}，当前版本 v{1}。是否前往发布页面下载更新？.
+        /// </summary>
+        internal static string UpdateAvailableDialogMessageFormat {
+            get {
+                return ResourceManager.GetString("UpdateAvailableDialogMessageFormat", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to 记住我的选择.
+        /// </summary>
+        internal static string UpdateAvailableDialogRememberChoiceText {
+            get {
+                return ResourceManager.GetString("UpdateAvailableDialogRememberChoiceText", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to 发现新版本.
+        /// </summary>
+        internal static string UpdateAvailableDialogTitle {
+            get {
+                return ResourceManager.GetString("UpdateAvailableDialogTitle", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to 更新.
+        /// </summary>
+        internal static string UpdateAvailableDialogUpdateButtonText {
+            get {
+                return ResourceManager.GetString("UpdateAvailableDialogUpdateButtonText", resourceCulture);
+            }
+        }
+
+
+        /// <summary>
         ///   Looks up a localized string similar to Wrap Text.
         /// </summary>
         internal static string WordWrapContextMenuItemText {

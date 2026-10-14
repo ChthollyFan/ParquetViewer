@@ -21,6 +21,7 @@ namespace ParquetViewer
         private const string DarkModeKey = "DarkMode";
         private const string UserSelectedCultureKey = "UserSelectedCulture";
         private const string QueryEditorZoomLevelKey = "QueryEditorZoomLevel";
+        private const string SkippedUpdateVersionKey = "SkippedUpdateVersion";
 
         public static DateFormat DateTimeDisplayFormat
         {
@@ -112,6 +113,18 @@ namespace ParquetViewer
         {
             get => ReadRegistryValue(QueryEditorZoomLevelKey, out int value) ? value : null;
             set => SetRegistryValue(QueryEditorZoomLevelKey, value);
+        }
+
+        /// <summary>
+        /// 用户勾选「记住我的选择」并取消更新时记下的版本号，该版本不再提示更新。
+        /// </summary>
+        /// <remarks>
+        /// 远端出现更新的版本时提示逻辑会再次弹窗，因此不需要"每次更新后重置"的额外清理。
+        /// </remarks>
+        public static string? SkippedUpdateVersion
+        {
+            get => ReadRegistryValue(SkippedUpdateVersionKey, out string? value) && !string.IsNullOrWhiteSpace(value) ? value : null;
+            set => SetRegistryValue(SkippedUpdateVersionKey, value ?? string.Empty);
         }
 
         private static bool ReadRegistryValue<T>(string key, [NotNullWhen(true)] out T? value)
