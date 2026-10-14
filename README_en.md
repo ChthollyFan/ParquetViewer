@@ -17,11 +17,9 @@ Some key features:
 * Open single or partitioned files
 * Generate SQL schema from parquet files
 * Easily preview & export image and audio data
+* Check for new releases on startup and jump straight to the release page to download the update
 
 # Download
 Releases can be found here: https://github.com/ChthollyFan/ParquetViewer/releases
 
 Details on how to use the utility can be found in [the Wiki](https://github.com/ChthollyFan/ParquetViewer/wiki)
-
-# Sponsors
-Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a>

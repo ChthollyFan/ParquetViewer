@@ -69,6 +69,8 @@ $b = [System.IO.File]::ReadAllBytes($path)[0..2]
 $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF
 ```
 
+换行格式在本仓库要按 git 的口径理解：`core.autocrlf=true` 且没有 `.gitattributes`，`git ls-files --eol` 对 Markdown 报 `i/lf w/crlf` —— git 索引里存的是 LF，工作区检出的是 CRLF。编辑器里看到 CRLF 属正常现象，不要为了「统一成 LF」而重写整个文件，索引里保存的仍是 LF。
+
 `src/.editorconfig` 是代码风格来源，影响最大的三条：4 空格缩进、写显式类型（本项目禁用 `var`）、`insert_final_newline = false`（文件末尾不补空行）。
 
 ## 版本号
@@ -82,13 +84,63 @@ $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF
 
 - 界面文本在 `.resx`：`Xxx.resx`（英文）、`Xxx.zh-CN.resx`（简体中文）、`Xxx.tr.resx`（土耳其语）；新增语言按 `Xxx.<语言>.resx` 放在同目录。
 - "帮助 → 关于"的维护者行是 `AboutBox.resx` / `AboutBox.zh-CN.resx` 里的静态文本 `labelCompanyName.Text`，`AssemblyCompany` 不驱动它。
-- 改界面文本时逐语言补齐同名 key，否则该语言回退为英文。翻译模板与流程见 `docs/Translations.md`。
+- 改既有界面文本时逐语言补齐同名 key，否则该语言回退为英文；新增功能的文案只写简体中文并放进中性 `.resx`，英文/土耳其语不补 key 而回退为简体中文，既有译文保持原样。翻译模板与流程见 `docs/Translations.md`。
+- 翻译模板由 `.github/workflows/generate-translations-template.yaml` 自动维护：它以 `*.tr.resx` 为 source of truth，与英文 `.resx` 合成后 `Export-Csv` 到 `.github/ISSUE_TEMPLATE/translation_template.csv`，并在 PR 上自动提交回原分支（会给 PR 增加一个 bot 提交）。改完 `.resx` 不必手动同步该 csv。
 
 ## 结构
 
 `src/ParquetViewer`（net10.0-windows，WinForms 主程序）、`src/ParquetViewer.Engine`（引擎抽象）、`src/ParquetViewer.Engine.ParquetNET`（默认引擎）、`src/ParquetViewer.Engine.DuckDB`（仅 `Release_SelfContained` 配置引用）、`src/ParquetViewer.Tests`（MSTest）。
 
 中文使用文档在 `docs/`；用户可见的变更要同步 `README.md` 与 `README_en.md`。
+
+### 项目依赖与配置
+
+解决方案只有三个配置；`Release_SelfContained` 在 Engine / ParquetNET / DuckDB / Tests 上映射到各自的 `Release`，只有主程序真正区分：
+
+| 项目 | 目标框架 | 特征 |
+| --- | --- | --- |
+| `src/ParquetViewer` | net10.0-windows | `WinExe`、`x64`、`PublishSingleFile=true`、`StartupObject=ParquetViewer.Program`、`ApplicationHighDpiMode=PerMonitorV2`、`GenerateAssemblyInfo=false`（版本号在 `Properties/AssemblyInfo.cs`）、`EnforceCodeStyleInBuild=True` |
+| `src/ParquetViewer.Engine` | net10.0 | 引擎抽象，无任何引用 |
+| `src/ParquetViewer.Engine.ParquetNET` | net10.0 | `x64`，引用 `Engine` 与 Parquet.Net |
+| `src/ParquetViewer.Engine.DuckDB` | net10.0 | `x64`，引用 `Engine` 与 DuckDB.NET.Data.Full |
+| `src/ParquetViewer.Tests` | net10.0-windows | `x64`，无条件引用上面四个项目（所以 Debug 下也会编译并测试 DuckDB） |
+
+- 主程序对 DuckDB 的引用是**带条件**的（`src/ParquetViewer/ParquetViewer.csproj:82-85`）：`<ItemGroup Condition="'$(Configuration)' == 'Release_SelfContained'">` 里才出现 DuckDB 的 `ProjectReference`，注释原文「We only use DuckDB in the selfcontained release to save on file size」。给主程序加新依赖时注意放对位置，不要让它进入非自包含版。
+- 包版本集中管理：`src/Directory.Packages.props`（`ManagePackageVersionsCentrally=true`）是唯一版本来源，各 csproj 的 `PackageReference` 只写包名、不写 `Version`。新增或升级包只改这一个文件，然后重新还原。
+- 测试项目把 `Data\**\*.parquet` 以 `CopyToOutputDirectory=PreserveNewest` 复制到输出目录，新增样本文件无需改代码即可按相对路径访问。
+
+## 引擎架构
+
+`IParquetEngine`（`src/ParquetViewer.Engine/IParquetEngine.cs`）是唯一的引擎契约，两个实现分别在 `src/ParquetViewer.Engine.ParquetNET/ParquetEngine.cs`（默认）与 `src/ParquetViewer.Engine.DuckDB/ParquetEngine.cs`（可选）：
+
+```csharp
+List<string> Fields; long RecordCount; int NumberOfPartitions;
+Dictionary<string, string> CustomMetadata; string Path; IParquetMetadata Metadata;
+Task<Func<bool, DataTable>> ReadRowsAsync(List<string> selectedFields, int offset, int recordCount, CancellationToken token, IProgress<int>? progress);
+Task WriteDataToParquetFileAsync(DataTable dataTable, string path, CancellationToken token, IProgress<int> progress, Dictionary<string, string>? customMetadata);
+IEnumerable<string> GetOpenParquetFilePaths();
+```
+
+- 改接口必须同步两个实现与 `src/ParquetViewer.Tests`。两个实现的结果口径（列类型、能否处理 null 复杂类型、二层 list 是否按 struct 处理、schema 路径分隔符）必须一致；确有差异时改测试期望值，或用 `[SkipWhen]` 明确记录。
+- 引擎选择与回退在 `src/ParquetViewer/MainForm.cs:338-378`：默认走 `Engine.ParquetNET.ParquetEngine`（`MainForm.cs:261`）；`#if RELEASE_SELFCONTAINED` 下 ParquetNET 抛异常时改用 DuckDB 引擎并 `SwapEngines`，两者都失败才抛 `Exceptions.RowsReadException(unhandledEx, duckDbEx)`；非自包含版（`#else` 分支，`MainForm.cs:373-375`）没有回退，直接失败。状态栏 tooltip 显示当前引擎（`MainForm.cs:473`）。
+- 读取行为集中配置在 `src/ParquetViewer.Engine/ParquetEngineSettings.cs`：三个显示格式静态属性，以及 `MaxReadParallelism`（`0`=自动，取逻辑核数与引擎内部上限 8 的较小值；`1`=禁用并行；`>1`=限制并行度）。只有「单文件 + 跨多个 row group」才可能并行。
+- 并行分片规则在 `src/ParquetViewer.Engine.ParquetNET/ParquetEngine.Processor.cs:153-265`：分片边界必须对齐 thrift row group，thrift 行数与实际 `RecordCount` 不一致时回退串行；每个分片用**独立的 `ParquetReader`** —— `ParquetRowGroupReader` 共享底层流，并发读会破坏读位置，不能直接用 `Parallel.For` 读同一个 reader。
+- 拼接式 parquet（多份文件首尾相接成一份）由 `src/ParquetViewer.Engine.ParquetNET/ParquetSegmentSource.cs` / `ParquetSegmentStream.cs` / `ParquetFileSegments.cs` 支持，必须按片段逐个解析：并行读取与 DuckDB 引擎都不支持这类文件，相关用例用 `[SkipWhen(typeof(DuckDBEngineTests), "…")]` 标注。
+- `src/ParquetViewer.Engine/Types/` 放引擎值类型（`IListValue`、`IStructValue`、`IMapValue`、`IByteArrayValue` 及 `DisplayFormat` 枚举 Hex/IPv6/IPv4/Guid/Short/Integer/Long/Float/Double/ASCII/Base64/Size），`src/ParquetViewer.Engine/DataTableLite.cs` 定义 `DataTableLite` / `ColumnLite`。这些是 UI 与导出共用的数据形状，扩展时要同时考虑两个引擎与导出路径。
+
+## 测试
+
+- 抽象基类 `EngineTests`（`src/ParquetViewer.Tests/EngineTests.cs`）定义全部用例，`ParquetNETEngineTests` 与 `DuckDBEngineTests` 各传一组构造参数（`useDuckDBEngine`、`canHandleNullComplexTypes`、`treatsTwoTierListAsStruct`、`schemaPathSeperator`），所以同一份断言会对两个引擎各跑一遍。
+- 引擎能力差异用 `[SkippableTestMethod]` + `[SkipWhen(typeof(测试类), "原因")]` 标注（`src/ParquetViewer.Tests/SkipWhenAttribute.cs`：属性 `TestClassToSkip` 收的是**测试类**类型，如 `typeof(DuckDBEngineTests)`，不是引擎类型；`Reason` 要写清缺什么能力；`[AttributeUsage(Method, AllowMultiple = true)]` 允许一个用例挂多条）。
+- 样本文件在 `src/ParquetViewer.Tests/Data/`（共 36 个 `.parquet`：32 个在目录根，4 个在 `PARTITIONED_PARQUET_FILE_TEST/` 子目录供分区用例使用），csproj 以 `Data\**\*.parquet` 通配复制到输出目录，文件名与用例对应。
+- `[assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]`：用例方法级并行，新增用例不要依赖共享可变静态状态。
+- 不依赖两引擎差异的纯逻辑断言放 `src/ParquetViewer.Tests/HelperTests.cs`（如 `SEMANTIC_VERSION_PARSER_TESTS`、过滤器 SQL 生成、`ByteArray` 截断）。
+
+## 用户设置
+
+- 设置存注册表 `HKCU\Software\ParquetViewer`（`src/ParquetViewer/AppSettings.cs`），不是配置文件；键包括 `AlwaysSelectAllFields`、`DateTimeDisplayFormat`、`CustomDateFormat`、`AlwaysLoadAllRecords`、`DarkMode`、`UserSelectedCulture`、`QueryEditorZoomLevel`、`OpenedFileCount` 等。新增设置要给它一个默认值，并考虑旧版本遗留值的行为。
+- `RemoveLegacyAnalyticsSettings()` 在 `src/ParquetViewer/Program.cs:38` 启动时调用，负责清理已移除的匿名上报遗留键，不能删。
+- 文件关联走命令行入口 `ParquetViewer.exe PERFORM_FILE_ASSOCIATION true|false`，由 `Program.cs` 的 `PERFORM_FILE_ASSOCIATION` 分支处理，退出码 `0`=成功、`1`=操作失败、`2`=缺 true/false 参数、`3`=其它异常（`Program.cs:46-74`）。
 
 ## 发布
 
