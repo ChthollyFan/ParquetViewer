@@ -371,6 +371,10 @@ namespace ParquetViewer
 
                 }
             }
+
+            // 清除按钮要同时复位编辑栏：只撤销 RowFilter 会让表格恢复全量数据，
+            // 编辑栏却仍停留在旧 SQL 上，下次加载还会按编辑栏内容把旧条件重新套用
+            this.searchFilterTextBox.Clear();
         }
 
         private void MainForm_Resize(object sender, EventArgs e)
