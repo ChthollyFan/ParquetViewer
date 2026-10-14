@@ -1,7 +1,9 @@
 ﻿using ParquetViewer.Helpers;
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace ParquetViewer
@@ -187,6 +189,51 @@ namespace ParquetViewer
                 {
                     AppSettings.DarkMode = true;
                 }
+            }
+        }
+
+        /// <summary>
+        /// 启动时检查本仓库是否有新的正式版本，有则询问用户是否前往发布页面更新。
+        /// </summary>
+        /// <param name="owner">弹窗的宿主窗口，保证弹窗显示在主窗口中央</param>
+        /// <remarks>
+        /// 查询失败、远端没有更新的版本、或用户此前勾选「记住我的选择」并取消过的同一个版本都不会弹窗；
+        /// 远端出现更新的版本时会重新提示（相当于每次更新之后该记忆自动失效）。
+        /// </remarks>
+        public static async Task AskUserIfTheyWantToUpdateAsync(IWin32Window owner)
+        {
+            try
+            {
+                var latestRelease = await Env.FetchLatestRelease();
+                if (latestRelease.Version is not SemanticVersion latestVersion)
+                {
+                    return;
+                }
+
+                if (!UpdatePromptPolicy.ShouldPrompt(Env.AssemblyVersion, latestVersion, AppSettings.SkippedUpdateVersion))
+                {
+                    return;
+                }
+
+                using var dialog = new UpdateAvailableDialog(latestVersion, Env.AssemblyVersion);
+                DialogResult dialogResult = dialog.ShowDialog(owner);
+                if (dialogResult == DialogResult.OK)
+                {
+                    //不做自动下载：直接打开该版本的 GitHub 发布页面，由用户自行下载
+                    if (latestRelease.Url is Uri releaseUri)
+                    {
+                        Process.Start(new ProcessStartInfo(releaseUri.ToString()) { UseShellExecute = true });
+                    }
+                }
+                else if (dialog.RememberChoice)
+                {
+                    //只有「记住我的选择」+「取消」才记录跳过版本，选择更新时不该留下任何记忆
+                    AppSettings.SkippedUpdateVersion = latestVersion.ToString();
+                }
+            }
+            catch
+            {
+                //更新提示属于附加功能，任何异常都不应影响程序正常启动
             }
         }
     }

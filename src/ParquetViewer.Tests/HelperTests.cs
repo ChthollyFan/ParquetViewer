@@ -229,5 +229,27 @@ namespace ParquetViewer.Tests
             Assert.AreEqual("01-02-03-04-05-06-07-08-09-10", byteArrayValue.ToStringTruncated(29));
             Assert.AreEqual("01-02-03-04-05-06-07-08-09-10", byteArrayValue.ToString());
         }
+
+        [TestMethod]
+        [DataRow("1.0.0", "1.0.1", null, true)] //远端有新版本且用户没有记住过任何版本
+        [DataRow("1.0.0", "1.0.1", "1.0.1", false)] //记住的正是本次要提示的版本
+        [DataRow("1.0.0", "1.0.2", "1.0.1", true)] //远端又出现了更新的版本，记住的更旧版本不应继续生效
+        [DataRow("1.0.0", "1.0.0", null, false)] //远端版本与当前版本相同
+        [DataRow("1.0.1", "1.0.0", null, false)] //远端版本落后于当前版本
+        [DataRow("1.0.0", null, null, false)] //没有查询到远端版本
+        [DataRow("1.0.0", "1.0.1", "not-a-version", true)] //记住的版本号无法解析，视为没有记住
+        public void UPDATE_PROMPT_POLICY_TESTS(string currentVersion, string? latestVersion, string? skippedVersion, bool expectedShouldPrompt)
+        {
+            Assert.IsTrue(SemanticVersion.TryParse(currentVersion, out var parsedCurrentVersion));
+
+            SemanticVersion? parsedLatestVersion = null;
+            if (latestVersion is not null)
+            {
+                Assert.IsTrue(SemanticVersion.TryParse(latestVersion, out var parsedVersion));
+                parsedLatestVersion = parsedVersion;
+            }
+
+            Assert.AreEqual(expectedShouldPrompt, UpdatePromptPolicy.ShouldPrompt(parsedCurrentVersion, parsedLatestVersion, skippedVersion));
+        }
     }
 }
