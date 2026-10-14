@@ -332,6 +332,8 @@ namespace ParquetViewer
                 {
                     this.Cursor = Cursors.WaitCursor;
                     this.MainDataSource.DefaultView.RowFilter = queryText;
+                    //重新执行查询会筛出新的行集，原有多字段排序不再适用，这里一并清除
+                    this.mainGridView.ClearSort();
                 }
                 catch (Exception ex)
                 {
