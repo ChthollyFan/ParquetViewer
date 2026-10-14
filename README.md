@@ -25,6 +25,7 @@ ParquetViewer 是一个实用工具，帮助你在 Windows 桌面环境下快速
 - 支持 `fixed_size_binary[x]` 等二进制类型的正确解析与多种显示格式（Hex / ASCII / Base64 / Guid 等）
 - 支持深色 / 浅色主题切换
 - 支持多语言界面（可在 Help → Language 菜单切换）
+- 启动时自动检查新版本，发现更新可一键跳转到发布页面下载（可勾选“记住我的选择”跳过该版本）
 
 ## 下载
 
@@ -140,12 +141,11 @@ docs/                               # 中文文档（Wiki 中文版）
 
 - 欢迎提交 Issue 报告问题或功能建议
 - 欢迎提交 Pull Request 贡献代码
-- 若希望新增界面语言翻译，请参考原项目 Wiki 中的 [Translations](https://github.com/mukunku/ParquetViewer/wiki/Translations) 页面（翻译模板位于 `.github/ISSUE_TEMPLATE/translation_template.csv`）
+- 若希望新增界面语言翻译，请参考 [docs/Translations.md](docs/Translations.md)（翻译模板位于 `.github/ISSUE_TEMPLATE/translation_template.csv`，由 CI 自动生成）
 
 ## 致谢
 
 - 感谢 [mukunku/ParquetViewer](https://github.com/mukunku/ParquetViewer) 原作者与所有贡献者
-- 代码签名由 <a href="https://about.signpath.io/">SignPath.io</a> 免费提供，证书来自 <a href="https://signpath.org/">SignPath Foundation</a>
 
 ## 许可
 
