@@ -396,6 +396,24 @@ namespace ParquetViewer.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to 该列的数据类型不支持排序，已保持原有排序。.
+        /// </summary>
+        internal static string SortingNotSupportedErrorMessage {
+            get {
+                return ResourceManager.GetString("SortingNotSupportedErrorMessage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to 无法排序.
+        /// </summary>
+        internal static string SortingNotSupportedErrorTitle {
+            get {
+                return ResourceManager.GetString("SortingNotSupportedErrorTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Struct `{0}` contains unsupported field: `{1}`.
         /// </summary>
         internal static string StructWithUnsupportedFieldErrorMessageFormat {

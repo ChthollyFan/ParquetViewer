@@ -233,6 +233,14 @@ Please try another file format or reduce the amount of columns you are exporting
     <value>Some files could not be loaded. Invalid Parquet files:</value>
     <comment>Shown when the user tries to open a folder and some of the found parquet files are invalid</comment>
   </data>
+  <data name="SortingNotSupportedErrorMessage" xml:space="preserve">
+    <value>该列的数据类型不支持排序，已保持原有排序。</value>
+    <comment>点击表头排序时，数据源无法比较该列类型（例如结构体、列表等复杂类型）的提示正文</comment>
+  </data>
+  <data name="SortingNotSupportedErrorTitle" xml:space="preserve">
+    <value>无法排序</value>
+    <comment>点击表头排序时，数据源无法比较该列类型时的提示窗口标题</comment>
+  </data>
   <data name="UnexpectedFileReadErrorMessageFormat" xml:space="preserve">
     <value>Could not load parquet file.
 

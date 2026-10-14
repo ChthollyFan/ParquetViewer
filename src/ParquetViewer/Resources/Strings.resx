@@ -296,6 +296,10 @@ Would you like to switch to a {2} file instead?</value>
     <value>can't go back</value>
     <comment>Text shown when the quick peek window's link to go back to the source cell is clicked but the source cell no longer exists</comment>
   </data>
+  <data name="ClearSortingText" xml:space="preserve">
+    <value>清除排序</value>
+    <comment>表头右键菜单项：清除当前的多字段排序并恢复数据的原始行序</comment>
+  </data>
   <data name="SaveImageAsButtonText" xml:space="preserve">
     <value>Save image as {0}</value>
     <comment>Shown on the save image to file button in the quick peek form</comment>

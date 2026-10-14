@@ -48,6 +48,39 @@ namespace ParquetViewer.Controls
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
         public string DateValueEscapeFormat { get; set; } = "#{0}#";
 
+        /// <summary>
+        /// 单字段排序描述：记录参与排序的列，以及它在多字段排序中的优先级（在列表中越靠前优先级越高）
+        /// </summary>
+        public readonly struct SortDescriptor
+        {
+            /// <summary>
+            /// 初始化排序描述
+            /// </summary>
+            /// <param name="columnName">参与排序的列名</param>
+            /// <param name="direction">排序方向</param>
+            public SortDescriptor(string columnName, ListSortDirection direction)
+            {
+                ColumnName = columnName;
+                Direction = direction;
+            }
+
+            /// <summary>参与排序的列名</summary>
+            public string ColumnName { get; }
+
+            /// <summary>排序方向</summary>
+            public ListSortDirection Direction { get; }
+        }
+
+        //多字段排序的优先级前缀使用带圈数字；超过 20 个排序键时退化为 (n) 形式
+        private static readonly string[] SORT_PRIORITY_PREFIXES =
+        [
+            "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+            "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"
+        ];
+
+        //当前生效的多字段排序；列表顺序即用户点击表头的先后顺序，也就是排序优先级
+        private readonly List<SortDescriptor> sortDescriptors = new();
+
         private readonly HashSet<int> clickableColumnIndexes = new();
         private readonly Dictionary<(int, int), QuickPeekForm> openQuickPeekForms = new();
         private bool isCopyingToClipboard = false;
@@ -85,6 +118,10 @@ namespace ParquetViewer.Controls
 
             SetColumnCellStyles();
             AutoSizeColumns();
+
+            //换页或加载全部行会重建数据源，这里在列集合就绪后恢复排序；列已不存在的排序键直接丢弃
+            PruneSortDescriptors();
+            ApplySort();
         }
 
         private void SetColumnCellStyles()
@@ -159,8 +196,27 @@ namespace ParquetViewer.Controls
             {
                 var columnName = this.Columns[e.ColumnIndex].Name;
                 //Draw a star '*' next to column headers that are using a non-default display format
-                if ((this.byteArrayColumnsWithFormatOverrides.TryGetValue(columnName, out var dateFormat) && dateFormat != default)
-                    || (this.floatColumnsWithFormatOverrides.TryGetValue(columnName, out var floatFormat) && floatFormat != default))
+                var hasCustomDisplayFormat = (this.byteArrayColumnsWithFormatOverrides.TryGetValue(columnName, out var dateFormat) && dateFormat != default)
+                    || (this.floatColumnsWithFormatOverrides.TryGetValue(columnName, out var floatFormat) && floatFormat != default);
+
+                var sortRank = GetSortRank(columnName);
+                if (sortRank > 0)
+                {
+                    //参与排序的列表头显示“序号 + 方向箭头 + 列名”，序号即多字段排序的优先级，因此不再使用系统排序箭头
+                    e.PaintBackground(e.CellBounds, true);
+
+                    var headerText = BuildSortIndicatorPrefix(sortRank, GetSortDirection(columnName))
+                        + (e.FormattedValue?.ToString() ?? columnName);
+                    if (hasCustomDisplayFormat)
+                        headerText += " *";
+
+                    WidenColumnForSortIndicator(this.Columns[e.ColumnIndex], e.Graphics!, e.CellStyle!.Font!);
+                    TextRenderer.DrawText(e.Graphics!, headerText, e.CellStyle!.Font, e.CellBounds, e.CellStyle.ForeColor,
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.NoPrefix);
+
+                    e.Handled = true;
+                }
+                else if (hasCustomDisplayFormat)
                 {
                     e.PaintBackground(e.CellBounds, true);
                     e.PaintContent(e.CellBounds);
@@ -321,7 +377,8 @@ namespace ParquetViewer.Controls
 
             //Checkbox columns aren't sortable by default for some reason.
             //https://stackoverflow.com/q/14979848/1458738
-            e.Column.SortMode = DataGridViewColumnSortMode.Automatic;
+            //改用 Programmatic：排序交给本控件自己处理，DataGridView 自带的单列排序无法取消，也不支持多字段
+            e.Column.SortMode = DataGridViewColumnSortMode.Programmatic;
 
             base.OnColumnAdded(e);
         }
@@ -606,6 +663,205 @@ namespace ParquetViewer.Controls
             }
         }
 
+        /// <summary>
+        /// 处理一次表头左键点击：未参与排序的列追加为末位排序键；已升序的列改为降序；已降序的列取消该列排序
+        /// </summary>
+        /// <param name="columnIndex">被点击的列索引</param>
+        private void ToggleSort(int columnIndex)
+        {
+            if (columnIndex < 0 || columnIndex >= this.Columns.Count)
+                return;
+
+            var columnName = this.Columns[columnIndex].Name;
+            //先记下点击前的排序，万一数据源拒绝新的排序表达式还能原样回滚
+            var sortDescriptorsBeforeClick = new List<SortDescriptor>(this.sortDescriptors);
+            var existingIndex = this.sortDescriptors.FindIndex(descriptor =>
+                descriptor.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+
+            if (existingIndex < 0)
+            {
+                //首次点击该列：追加到末尾，优先级排在已有排序键之后
+                this.sortDescriptors.Add(new SortDescriptor(columnName, ListSortDirection.Ascending));
+            }
+            else if (this.sortDescriptors[existingIndex].Direction == ListSortDirection.Ascending)
+            {
+                this.sortDescriptors[existingIndex] = new SortDescriptor(columnName, ListSortDirection.Descending);
+            }
+            else
+            {
+                //第三次点击同一列：取消该列排序，其余列的排序与优先级保持不变
+                this.sortDescriptors.RemoveAt(existingIndex);
+            }
+
+            if (!ApplySort())
+            {
+                this.sortDescriptors.Clear();
+                this.sortDescriptors.AddRange(sortDescriptorsBeforeClick);
+                ApplySort();
+
+                MessageBox.Show(this,
+                    Resources.Errors.SortingNotSupportedErrorMessage,
+                    Resources.Errors.SortingNotSupportedErrorTitle,
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        /// <summary>
+        /// 把当前的多字段排序应用到数据源视图；换页或加载全部行后由 OnDataSourceChanged 重新调用
+        /// </summary>
+        /// <returns>排序生效返回 true；数据源拒绝该表达式（例如列类型不可比较）时返回 false</returns>
+        private bool ApplySort()
+        {
+            if (this.DataSource is not DataTable dataTable || dataTable.DefaultView is not DataView view)
+                return false;
+
+            try
+            {
+                view.Sort = BuildSortExpression(this.sortDescriptors, this.ColumnNameEscapeFormat);
+            }
+            catch (Exception)
+            {
+                //数据源无法比较该类型时保持原状，由调用方决定是否提示用户
+                return false;
+            }
+
+            this.Invalidate(); //表头的排序序号与方向需要立刻重绘
+            return true;
+        }
+
+        /// <summary>
+        /// 清除全部排序并恢复数据源的原始行序
+        /// </summary>
+        public void ClearSort()
+        {
+            if (this.sortDescriptors.Count == 0)
+                return;
+
+            this.sortDescriptors.Clear();
+            ApplySort();
+        }
+
+        /// <summary>
+        /// 去掉在当前数据源中已不存在的排序键，例如用户换了文件导致列集合变化
+        /// </summary>
+        private void PruneSortDescriptors()
+        {
+            if (this.DataSource is not DataTable dataTable)
+            {
+                this.sortDescriptors.Clear();
+                return;
+            }
+
+            this.sortDescriptors.RemoveAll(descriptor => !dataTable.Columns.Cast<DataColumn>()
+                .Any(column => column.ColumnName.Equals(descriptor.ColumnName, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        /// <summary>
+        /// 查询某列在当前多字段排序中的优先级
+        /// </summary>
+        /// <param name="columnName">列名</param>
+        /// <returns>1 表示主排序键；0 表示该列未参与排序</returns>
+        private int GetSortRank(string columnName)
+        {
+            for (var i = 0; i < this.sortDescriptors.Count; i++)
+            {
+                if (this.sortDescriptors[i].ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                    return i + 1;
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 查询某列的排序方向
+        /// </summary>
+        /// <param name="columnName">列名</param>
+        /// <returns>该列当前的排序方向；该列未参与排序时返回升序</returns>
+        private ListSortDirection GetSortDirection(string columnName)
+        {
+            var sortRank = GetSortRank(columnName);
+            return sortRank > 0 ? this.sortDescriptors[sortRank - 1].Direction : ListSortDirection.Ascending;
+        }
+
+        /// <summary>
+        /// 生成表头上的排序指示前缀，例如“①↑ ”
+        /// </summary>
+        /// <param name="sortRank">排序优先级，从 1 开始</param>
+        /// <param name="direction">排序方向</param>
+        /// <returns>优先级与方向组成的展示文本</returns>
+        private static string BuildSortIndicatorPrefix(int sortRank, ListSortDirection direction)
+        {
+            //超过带圈数字的表示范围后退化为 (n)，保证序号始终可见
+            var priority = sortRank <= SORT_PRIORITY_PREFIXES.Length ? SORT_PRIORITY_PREFIXES[sortRank - 1] : $"({sortRank})";
+            var arrow = direction == ListSortDirection.Ascending ? "↑" : "↓";
+            return priority + arrow + " ";
+        }
+
+        /// <summary>
+        /// 为带排序指示的表头补足列宽，避免序号或箭头被裁掉
+        /// </summary>
+        /// <param name="column">需要检查宽度的列</param>
+        /// <param name="graphics">用于测量文本的绘图对象</param>
+        /// <param name="font">表头字体</param>
+        private static void WidenColumnForSortIndicator(DataGridViewColumn column, Graphics graphics, Font font)
+        {
+            //带圈数字覆盖到 ⑳，更多排序键会写成 (n)，所以统一按两位数序号的宽度预留，避免排序键增减时列宽抖动
+            const string WIDEST_SORT_INDICATOR = "(99)↓ ";
+
+            var requiredWidth = MeasureStringWidth(graphics, font, WIDEST_SORT_INDICATOR, false)
+                + MeasureStringWidth(graphics, font, column.Name, true);
+
+            if (requiredWidth > column.Width && requiredWidth < int.MaxValue)
+                column.Width = requiredWidth;
+        }
+
+        /// <summary>
+        /// 按点击顺序生成数据源的排序表达式，排在前的列优先级更高
+        /// </summary>
+        /// <param name="sortDescriptors">排序描述集合，列表顺序即优先级顺序</param>
+        /// <param name="columnNameEscapeFormat">列名转义格式，默认为方括号</param>
+        /// <returns>可直接赋给 DataView.Sort 的表达式；没有任何排序键时返回空字符串</returns>
+        public static string BuildSortExpression(IEnumerable<SortDescriptor> sortDescriptors, string columnNameEscapeFormat = "[{0}]")
+        {
+            if (sortDescriptors is null)
+                return string.Empty;
+
+            //DataView 会按表达式从左到右依次比较，正好对应点击顺序决定的优先级
+            return string.Join(", ", sortDescriptors.Select(descriptor =>
+                $"{EscapeColumnNameIfNeeded(descriptor.ColumnName, columnNameEscapeFormat)} "
+                + (descriptor.Direction == ListSortDirection.Ascending ? "ASC" : "DESC")));
+        }
+
+        /// <summary>
+        /// 列名包含空格或标点时用方括号包裹，避免数据源解析表达式失败
+        /// </summary>
+        /// <param name="columnName">原始列名</param>
+        /// <param name="columnNameEscapeFormat">列名转义格式</param>
+        /// <returns>可直接写进表达式的列名</returns>
+        private static string EscapeColumnNameIfNeeded(string columnName, string columnNameEscapeFormat)
+        {
+            return _validColumnNameRegex.IsMatch(columnName)
+                ? columnName
+                : string.Format(columnNameEscapeFormat, columnName);
+        }
+
+        /// <summary>
+        /// 向表头右键菜单加入“清除排序”，仅在当前存在排序时显示
+        /// </summary>
+        /// <param name="items">表头右键菜单的菜单项集合</param>
+        private void AddClearSortOption(ToolStripItemCollection items)
+        {
+            if (this.sortDescriptors.Count == 0)
+                return;
+
+            if (items.Count > 0)
+                items.Add(new ToolStripSeparator());
+
+            var menuItem = new ToolStripMenuItem(Resources.Strings.ClearSortingText);
+            menuItem.Click += (object? _, EventArgs _) => this.ClearSort();
+            items.Add(menuItem);
+        }
+
         protected override void OnColumnHeaderMouseClick(DataGridViewCellMouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
@@ -613,9 +869,14 @@ namespace ParquetViewer.Controls
 
             try
             {
-                base.OnColumnHeaderMouseClick(e); //This will trigger the sort operation and the OnSorted event if it's a left-click
+                base.OnColumnHeaderMouseClick(e); //This triggers the ColumnHeaderMouseClick subscribers
 
-                if (e.Button == MouseButtons.Right)
+                if (e.Button == MouseButtons.Left && e.ColumnIndex >= 0)
+                {
+                    //左键点击表头由本控件接管：升序 → 降序 → 取消，多列依次点击即形成多字段排序
+                    ToggleSort(e.ColumnIndex);
+                }
+                else if (e.Button == MouseButtons.Right)
                 {
                     this._headerContextMenu?.Dispose();
                     this._headerContextMenu = new ContextMenuStrip();
@@ -623,6 +884,7 @@ namespace ParquetViewer.Controls
                     AddFrozenOption(this._headerContextMenu.Items, e.ColumnIndex);
                     AddDisplayFormatOptions(this._headerContextMenu.Items, e.ColumnIndex);
                     AddWordWrapOption(this._headerContextMenu.Items, e.ColumnIndex);
+                    AddClearSortOption(this._headerContextMenu.Items);
 
                     if (this._headerContextMenu.Items.Count > 0)
                         this._headerContextMenu.Show(Cursor.Position);

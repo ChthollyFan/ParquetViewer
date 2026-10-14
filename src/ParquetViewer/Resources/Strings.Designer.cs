@@ -106,6 +106,15 @@ namespace ParquetViewer.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to 清除排序.
+        /// </summary>
+        internal static string ClearSortingText {
+            get {
+                return ResourceManager.GetString("ClearSortingText", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Copy as WHERE....
         /// </summary>
         internal static string CopyAsWhereConditionText {

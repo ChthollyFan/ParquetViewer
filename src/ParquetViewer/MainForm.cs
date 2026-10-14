@@ -117,7 +117,8 @@ namespace ParquetViewer
             set
             {
                 this.currentOffset = value;
-                LoadFileToGridview();
+                //换页属于同一份数据的局部重载，保留用户已设置的多字段排序
+                LoadFileToGridview(keepSorting: true);
             }
         }
 
@@ -166,7 +167,8 @@ namespace ParquetViewer
             {
                 // 统一在属性层做硬性截断：输入框、加载全部行按钮、总是加载全部记录设置都可能传进超大值
                 this.currentMaxRowCount = Math.Min(value, MaxRowsPerLoad);
-                LoadFileToGridview();
+                //改变每页行数（含加载全部行）同样属于同一份数据的重载，保留排序
+                LoadFileToGridview(keepSorting: true);
             }
         }
 
@@ -338,10 +340,20 @@ namespace ParquetViewer
             }
         }
 
-        private async void LoadFileToGridview()
+        /// <summary>
+        /// 重新从文件加载数据到表格
+        /// </summary>
+        /// <param name="keepSorting">是否保留当前的多字段排序：换页与加载全部行保留，重新打开文件或切换字段时重置</param>
+        private async void LoadFileToGridview(bool keepSorting = false)
         {
             if (this._openParquetEngine is null)
                 return;
+
+            if (!keepSorting)
+            {
+                //列集合可能随新文件变化，先清掉旧排序，避免它意外作用到新数据上
+                this.mainGridView.ClearSort();
+            }
 
 #if RELEASE_SELFCONTAINED
             //Self contained release has both Parquet.NET and DuckDB engines included as the file size remains the same.

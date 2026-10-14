@@ -1,6 +1,8 @@
 ﻿using ParquetViewer.Controls;
 using ParquetViewer.Engine.Types;
 using ParquetViewer.Helpers;
+using System.ComponentModel;
+using System.Data;
 using System.Globalization;
 
 namespace ParquetViewer.Tests
@@ -216,6 +218,67 @@ namespace ParquetViewer.Tests
             {
                 CultureInfo.CurrentCulture = originalCulture;
             }
+        }
+
+        [TestMethod]
+        public void BuildSortExpression_ReturnsEmptyString_WhenThereAreNoSortDescriptors()
+        {
+            Assert.IsEmpty(ParquetGridView.BuildSortExpression(null!));
+            Assert.IsEmpty(ParquetGridView.BuildSortExpression(new List<ParquetGridView.SortDescriptor>()));
+        }
+
+        [TestMethod]
+        public void BuildSortExpression_UsesClickOrderAsSortPriority()
+        {
+            var expression = ParquetGridView.BuildSortExpression(new List<ParquetGridView.SortDescriptor>
+            {
+                new ParquetGridView.SortDescriptor("Name", ListSortDirection.Ascending),
+                new ParquetGridView.SortDescriptor("Age", ListSortDirection.Descending)
+            });
+
+            Assert.AreEqual("Name ASC, Age DESC", expression);
+        }
+
+        [TestMethod]
+        public void BuildSortExpression_EscapesColumnNamesThatAreNotPlainIdentifiers()
+        {
+            var expression = ParquetGridView.BuildSortExpression(new List<ParquetGridView.SortDescriptor>
+            {
+                new ParquetGridView.SortDescriptor("First Name", ListSortDirection.Descending),
+                new ParquetGridView.SortDescriptor("a.b", ListSortDirection.Ascending),
+                new ParquetGridView.SortDescriptor("_id9", ListSortDirection.Ascending)
+            });
+
+            Assert.AreEqual("[First Name] DESC, [a.b] ASC, _id9 ASC", expression);
+        }
+
+        [TestMethod]
+        public void BuildSortExpression_ProducesMultiColumnSortAndEmptySortRestoresOriginalRowOrder()
+        {
+            //验证生成的表达式能被 DataView 直接使用：点击顺序决定优先级，清空表达式后恢复原始行序
+            using var dataTable = new DataTable();
+            dataTable.Columns.Add("Group", typeof(string));
+            dataTable.Columns.Add("Score", typeof(int));
+            dataTable.Rows.Add("B", 1);
+            dataTable.Rows.Add("A", 2);
+            dataTable.Rows.Add("B", 3);
+            dataTable.Rows.Add("A", 1);
+
+            dataTable.DefaultView.Sort = ParquetGridView.BuildSortExpression(new List<ParquetGridView.SortDescriptor>
+            {
+                new ParquetGridView.SortDescriptor("Group", ListSortDirection.Ascending),
+                new ParquetGridView.SortDescriptor("Score", ListSortDirection.Descending)
+            });
+
+            CollectionAssert.AreEqual(new[] { "A2", "A1", "B3", "B1" }, ReadGroupAndScore(dataTable.DefaultView));
+
+            dataTable.DefaultView.Sort = string.Empty;
+            CollectionAssert.AreEqual(new[] { "B1", "A2", "B3", "A1" }, ReadGroupAndScore(dataTable.DefaultView));
+        }
+
+        private static string[] ReadGroupAndScore(DataView dataView)
+        {
+            return dataView.Cast<DataRowView>().Select(row => $"{row["Group"]}{row["Score"]}").ToArray();
         }
 
         [TestMethod]
